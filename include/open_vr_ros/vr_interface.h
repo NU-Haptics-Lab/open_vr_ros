@@ -39,7 +39,7 @@ class VRInterface
   private:
     vr::IVRChaperone *pChaperone_;
     
-    uint max_devices_;
+    int max_devices_;
     
   private:
     DebugMsgCallback debug_;

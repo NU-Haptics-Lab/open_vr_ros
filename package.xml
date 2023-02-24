@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package>
-  <name>vive_ros</name>
+  <name>open_vr_ros</name>
   <version>0.0.1</version>
-  <description>The vive_ros package</description>
+  <description>The open_vr_ros package</description>
   <author>Vitor Matos</author>
   <author email="vmatos@robosavvy.com">Vitor Matos</author>
   

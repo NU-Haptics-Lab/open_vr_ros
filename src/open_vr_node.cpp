@@ -7,14 +7,14 @@
 #include <sensor_msgs/JoyFeedback.h>
 #include <std_srvs/Empty.h>
 #include <iostream>
-#include "vive_ros/vr_interface.h"
+#include "open_vr_ros/vr_interface.h"
 #include <geometry_msgs/TwistStamped.h>
 
 using namespace std;
 
-void handleDebugMessages(const std::string &msg) {ROS_DEBUG(" [VIVE] %s",msg.c_str());}
-void handleInfoMessages(const std::string &msg) {ROS_INFO(" [VIVE] %s",msg.c_str());}
-void handleErrorMessages(const std::string &msg) {ROS_ERROR(" [VIVE] %s",msg.c_str());}
+void handleDebugMessages(const std::string &msg) {ROS_DEBUG(" [OPEN_VR] %s",msg.c_str());}
+void handleInfoMessages(const std::string &msg) {ROS_INFO(" [OPEN_VR] %s",msg.c_str());}
+void handleErrorMessages(const std::string &msg) {ROS_ERROR(" [OPEN_VR] %s",msg.c_str());}
 void mySigintHandler(int sig){
 // Do some custom action.
 // For example, publish a stop message to some other nodes.
@@ -36,7 +36,7 @@ enum {X, Y, XY};
 enum {L, R, LR};
 
 #if defined USE_OPENGL
-#include "vive_ros/hellovr_opengl_main.h"
+#include "open_vr_ros/hellovr_opengl_main.h"
 class CMainApplicationMod : public CMainApplication{
   public:
     CMainApplicationMod( int argc, char *argv[] )
@@ -148,7 +148,7 @@ class CMainApplicationMod : public CMainApplication{
 };
 
 #elif defined USE_VULKAN
-#include "vive_ros/hellovr_vulkan_main.h"
+#include "open_vr_ros/hellovr_vulkan_main.h"
 
 class CMainApplicationMod : public CMainApplication
 {
@@ -425,11 +425,11 @@ std::string GetTrackedDeviceString( vr::IVRSystem *pHmd, vr::TrackedDeviceIndex_
 #endif
 
 
-class VIVEnode
+class OPEN_VRnode
 {
   public:
-    VIVEnode(int rate);
-    ~VIVEnode();
+    OPEN_VRnode(int rate);
+    ~OPEN_VRnode();
     bool Init();
     void Run();
     void Shutdown();
@@ -463,7 +463,7 @@ class VIVEnode
 
 };
 
-VIVEnode::VIVEnode(int rate)
+OPEN_VRnode::OPEN_VRnode(int rate)
   : loop_rate_(rate)
   , nh_()
   , tf_broadcaster_()
@@ -472,21 +472,21 @@ VIVEnode::VIVEnode(int rate)
   , world_offset_({0, 0, 0})
   , world_yaw_(0)
 {
-  nh_.getParam("/vive/world_offset", world_offset_);
-  nh_.getParam("/vive/world_yaw", world_yaw_);
-  ROS_INFO(" [VIVE] World offset: [%2.3f , %2.3f, %2.3f] %2.3f", world_offset_[0], world_offset_[1], world_offset_[2], world_yaw_);
-  set_origin_server_ = nh_.advertiseService("/vive/set_origin", &VIVEnode::setOriginCB, this);
-  twist0_pub_ = nh_.advertise<geometry_msgs::TwistStamped>("/vive/twist0", 10);
-  twist1_pub_ = nh_.advertise<geometry_msgs::TwistStamped>("/vive/twist1", 10);
-  twist2_pub_ = nh_.advertise<geometry_msgs::TwistStamped>("/vive/twist2", 10);
-  feedback_sub_ = nh_.subscribe("/vive/set_feedback", 10, &VIVEnode::set_feedback, this);
+  nh_.getParam("/open_vr/world_offset", world_offset_);
+  nh_.getParam("/open_vr/world_yaw", world_yaw_);
+  ROS_INFO(" [OPEN_VR] World offset: [%2.3f , %2.3f, %2.3f] %2.3f", world_offset_[0], world_offset_[1], world_offset_[2], world_yaw_);
+  set_origin_server_ = nh_.advertiseService("/open_vr/set_origin", &OPEN_VRnode::setOriginCB, this);
+  twist0_pub_ = nh_.advertise<geometry_msgs::TwistStamped>("/open_vr/twist0", 10);
+  twist1_pub_ = nh_.advertise<geometry_msgs::TwistStamped>("/open_vr/twist1", 10);
+  twist2_pub_ = nh_.advertise<geometry_msgs::TwistStamped>("/open_vr/twist2", 10);
+  feedback_sub_ = nh_.subscribe("/open_vr/set_feedback", 10, &OPEN_VRnode::set_feedback, this);
 
 #ifdef USE_IMAGE
   image_transport::ImageTransport it(nh_);
-  sub_L = it.subscribe("/image_left", 1, &VIVEnode::imageCb_L, this);
-  sub_R = it.subscribe("/image_right", 1, &VIVEnode::imageCb_R, this);
-  sub_i_L = nh_.subscribe("/camera_info_left", 1, &VIVEnode::infoCb_L, this);
-  sub_i_R = nh_.subscribe("/camera_info_right", 1, &VIVEnode::infoCb_R, this);
+  sub_L = it.subscribe("/image_left", 1, &OPEN_VRnode::imageCb_L, this);
+  sub_R = it.subscribe("/image_right", 1, &OPEN_VRnode::imageCb_R, this);
+  sub_i_L = nh_.subscribe("/camera_info_left", 1, &OPEN_VRnode::infoCb_L, this);
+  sub_i_R = nh_.subscribe("/camera_info_right", 1, &OPEN_VRnode::infoCb_R, this);
   pMainApplication = new CMainApplicationMod( 0, NULL );
   if (!pMainApplication->BInit()){
     pMainApplication->Shutdown();
@@ -498,12 +498,12 @@ VIVEnode::VIVEnode(int rate)
   return;
 }
 
-VIVEnode::~VIVEnode()
+OPEN_VRnode::~OPEN_VRnode()
 {
   return;
 }
 
-bool VIVEnode::Init()
+bool OPEN_VRnode::Init()
 {
   //  Set logging functions
   
@@ -519,12 +519,12 @@ bool VIVEnode::Init()
   return true;
 }
 
-void VIVEnode::Shutdown()
+void OPEN_VRnode::Shutdown()
 {
   vr_.Shutdown();
 }
 
-bool VIVEnode::setOriginCB(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res)
+bool OPEN_VRnode::setOriginCB(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res)
 {
   double tf_matrix[3][4];
   int index = 1, dev_type;
@@ -534,7 +534,7 @@ bool VIVEnode::setOriginCB(std_srvs::Empty::Request& req, std_srvs::Empty::Respo
   }
   if (dev_type == 0) 
   {
-    ROS_WARN(" [VIVE] Coulnd't find controller 1.");
+    ROS_WARN(" [OPEN_VR] Coulnd't find controller 1.");
     return false;
   }
 
@@ -558,14 +558,14 @@ bool VIVEnode::setOriginCB(std_srvs::Empty::Request& req, std_srvs::Empty::Respo
   world_offset_[1] = new_offset[1];
   world_offset_[2] = new_offset[2];
 
-  nh_.setParam("/vive/world_offset", world_offset_);
-  nh_.setParam("/vive/world_yaw", world_yaw_);
-  ROS_INFO(" [VIVE] New world offset: [%2.3f , %2.3f, %2.3f] %2.3f", world_offset_[0], world_offset_[1], world_offset_[2], world_yaw_);
+  nh_.setParam("/open_vr/world_offset", world_offset_);
+  nh_.setParam("/open_vr/world_yaw", world_yaw_);
+  ROS_INFO(" [OPEN_VR] New world offset: [%2.3f , %2.3f, %2.3f] %2.3f", world_offset_[0], world_offset_[1], world_offset_[2], world_yaw_);
 
   return true;
 }
 
-void VIVEnode::set_feedback(sensor_msgs::JoyFeedbackConstPtr msg) {
+void OPEN_VRnode::set_feedback(sensor_msgs::JoyFeedbackConstPtr msg) {
   if(msg->type == 1 /* TYPE_RUMBLE */) {
     vr_.TriggerHapticPulse(msg->id, 0, (int)(msg->intensity));
     for(int i=0;i<16;i++)
@@ -573,7 +573,7 @@ void VIVEnode::set_feedback(sensor_msgs::JoyFeedbackConstPtr msg) {
   }
 }
 
-void VIVEnode::Run()
+void OPEN_VRnode::Run()
 {
   double tf_matrix[3][4];
   int run_hz_count = 0;
@@ -610,12 +610,12 @@ void VIVEnode::Run()
       // It's a HMD
       if (dev_type == 1)
       {
-        tf_broadcaster_.sendTransform(tf::StampedTransform(tf, ros::Time::now(), "world_vive", "hmd"));
+        tf_broadcaster_.sendTransform(tf::StampedTransform(tf, ros::Time::now(), "world_open_vr", "hmd"));
       }
       // It's a controller
       if (dev_type == 2)
       {
-        tf_broadcaster_.sendTransform(tf::StampedTransform(tf, ros::Time::now(), "world_vive", "controller_"+cur_sn));
+        tf_broadcaster_.sendTransform(tf::StampedTransform(tf, ros::Time::now(), "world_open_vr", "controller_"+cur_sn));
 
         vr::VRControllerState_t state;
         vr_.HandleInput(i, state);
@@ -641,19 +641,19 @@ void VIVEnode::Run()
 //        std::cout << static_cast<std::bitset<64> >(state.ulButtonPressed) << std::endl;
 //        std::cout << static_cast<std::bitset<64> >(state.ulButtonTouched) << std::endl;
         if(button_states_pubs_map.count(cur_sn) == 0){
-          button_states_pubs_map[cur_sn] = nh_.advertise<sensor_msgs::Joy>("/vive/controller_"+cur_sn+"/joy", 10);
+          button_states_pubs_map[cur_sn] = nh_.advertise<sensor_msgs::Joy>("/open_vr/controller_"+cur_sn+"/joy", 10);
         }
         button_states_pubs_map[cur_sn].publish(joy);
       }
       // It's a tracker
       if (dev_type == 3)
       {
-        tf_broadcaster_.sendTransform(tf::StampedTransform(tf, ros::Time::now(), "world_vive", "tracker_"+cur_sn));
+        tf_broadcaster_.sendTransform(tf::StampedTransform(tf, ros::Time::now(), "world_open_vr", "tracker_"+cur_sn));
       }
       // It's a lighthouse
       if (dev_type == 4)
       {
-        tf_broadcaster_.sendTransform(tf::StampedTransform(tf, ros::Time::now(), "world_vive", "lighthouse_"+cur_sn));
+        tf_broadcaster_.sendTransform(tf::StampedTransform(tf, ros::Time::now(), "world_open_vr", "lighthouse_"+cur_sn));
       }
 
     }
@@ -665,7 +665,7 @@ void VIVEnode::Run()
     quat_world.setRPY(M_PI/2, 0, world_yaw_);
     tf_world.setRotation(quat_world);
 
-    tf_broadcaster_.sendTransform(tf::StampedTransform(tf_world, ros::Time::now(), "world", "world_vive"));
+    tf_broadcaster_.sendTransform(tf::StampedTransform(tf_world, ros::Time::now(), "world", "world_open_vr"));
 
     // Publish twist messages for controller1 and controller2
     double lin_vel[3], ang_vel[3];
@@ -681,7 +681,7 @@ void VIVEnode::Run()
 
         geometry_msgs::TwistStamped twist_msg_stamped;
         twist_msg_stamped.header.stamp = ros::Time::now();
-        twist_msg_stamped.header.frame_id = "world_vive";
+        twist_msg_stamped.header.frame_id = "world_open_vr";
         twist_msg_stamped.twist = twist_msg;
 
         twist0_pub_.publish(twist_msg_stamped);
@@ -701,7 +701,7 @@ void VIVEnode::Run()
 
         geometry_msgs::TwistStamped twist_msg_stamped;
         twist_msg_stamped.header.stamp = ros::Time::now();
-        twist_msg_stamped.header.frame_id = "world_vive";
+        twist_msg_stamped.header.frame_id = "world_open_vr";
         twist_msg_stamped.twist = twist_msg;
 
         twist1_pub_.publish(twist_msg_stamped);
@@ -721,7 +721,7 @@ void VIVEnode::Run()
 
         geometry_msgs::TwistStamped twist_msg_stamped;
         twist_msg_stamped.header.stamp = ros::Time::now();
-        twist_msg_stamped.header.frame_id = "world_vive";
+        twist_msg_stamped.header.frame_id = "world_open_vr";
         twist_msg_stamped.twist = twist_msg;
 
         twist2_pub_.publish(twist_msg_stamped);
@@ -743,7 +743,7 @@ void VIVEnode::Run()
 }
 
 #ifdef USE_IMAGE
-void VIVEnode::imageCb_L(const sensor_msgs::ImageConstPtr& msg){
+void OPEN_VRnode::imageCb_L(const sensor_msgs::ImageConstPtr& msg){
   if(msg->width > 0 && msg->height > 0 ){
     try {
       pMainApplication->ros_img[L] = cv_bridge::toCvCopy(msg,"rgb8")->image;
@@ -754,7 +754,7 @@ void VIVEnode::imageCb_L(const sensor_msgs::ImageConstPtr& msg){
     ROS_WARN_THROTTLE(3, "Invalid image_left size (%dx%d) use default", msg->width, msg->height);
   }
 }
-void VIVEnode::imageCb_R(const sensor_msgs::ImageConstPtr& msg){
+void OPEN_VRnode::imageCb_R(const sensor_msgs::ImageConstPtr& msg){
   if(msg->width > 0 && msg->height > 0 ){
     try {
       pMainApplication->ros_img[R] = cv_bridge::toCvCopy(msg,"rgb8")->image;
@@ -765,7 +765,7 @@ void VIVEnode::imageCb_R(const sensor_msgs::ImageConstPtr& msg){
     ROS_WARN_THROTTLE(3, "Invalid image_right size (%dx%d) use default", msg->width, msg->height);
   }
 }
-void VIVEnode::infoCb_L(const sensor_msgs::CameraInfoConstPtr& msg){
+void OPEN_VRnode::infoCb_L(const sensor_msgs::CameraInfoConstPtr& msg){
   if(msg->K[0] > 0.0 && msg->K[4] > 0.0 ){
     pMainApplication->cam_f[L][0] = msg->K[0];
     pMainApplication->cam_f[L][1] = msg->K[4];
@@ -773,7 +773,7 @@ void VIVEnode::infoCb_L(const sensor_msgs::CameraInfoConstPtr& msg){
     ROS_WARN_THROTTLE(3, "Invalid camera_info_left fov (%fx%f) use default", msg->K[0], msg->K[4]);
   }
 }
-void VIVEnode::infoCb_R(const sensor_msgs::CameraInfoConstPtr& msg){
+void OPEN_VRnode::infoCb_R(const sensor_msgs::CameraInfoConstPtr& msg){
   if(msg->K[0] > 0.0 && msg->K[4] > 0.0 ){
     pMainApplication->cam_f[R][0] = msg->K[0];
     pMainApplication->cam_f[R][1] = msg->K[4];
@@ -787,12 +787,12 @@ void VIVEnode::infoCb_R(const sensor_msgs::CameraInfoConstPtr& msg){
 // Main
 int main(int argc, char** argv){
   signal(SIGINT, mySigintHandler);
-  ros::init(argc, argv, "vive_node");
+  ros::init(argc, argv, "open_vr_node");
 
 #ifdef USE_IMAGE
-  VIVEnode nodeApp(90); // VIVE display max fps
+  OPEN_VRnode nodeApp(90); // OPEN_VR display max fps
 #else
-  VIVEnode nodeApp(30);
+  OPEN_VRnode nodeApp(30);
 #endif
   if (!nodeApp.Init()){
     nodeApp.Shutdown();

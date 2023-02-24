@@ -1,18 +1,18 @@
 #include <iostream>
 #include <string>
 #include <map>
-#include "vive_ros/vr_interface.h"
+#include "open_vr_ros/vr_interface.h"
 
 inline void defaultDebugMsgCallback(const std::string &msg) {
-    std::cerr << "VIVE Debug: " << msg << std::endl;
+    std::cerr << "OPEN_VR Debug: " << msg << std::endl;
 }
 
 inline void defaultInfoMsgCallback(const std::string &msg) {
-    std::cerr << "VIVE Info: " << msg << std::endl;
+    std::cerr << "OPEN_VR Info: " << msg << std::endl;
 }
 
 inline void defaultErrorMsgCallback(const std::string &msg) {
-    std::cerr << "VIVE Error: " << msg << std::endl;
+    std::cerr << "OPEN_VR Error: " << msg << std::endl;
 }
 
 std::map<vr::ChaperoneCalibrationState, std::string> mapChaperonStrings
