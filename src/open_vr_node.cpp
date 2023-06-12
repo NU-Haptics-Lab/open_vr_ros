@@ -12,6 +12,9 @@
 #include "open_vr_ros/vr_interface.h"
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include "geometry_msgs/msg/transform_stamped.hpp"
+
+
+#define _USE_MATH_DEFINES
 #include <math.h>
 
 using namespace std;
@@ -459,13 +462,12 @@ class OPEN_VRnode
     std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
 
 
-    rclcpp::ServiceServer set_origin_server_;
+    rclcpp::Service<std_srvs::srv::Empty>::SharedPtr set_origin_server_;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist0_pub_;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist1_pub_;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist2_pub_;
-    std::map<std::string, rclcpp::Publisher<geometry_msgs::msg::TwistStamped>> button_states_pubs_map;
-    rclcpp::Subscriber feedback_sub_;
-
+    std::map<std::string, rclcpp::Publisher<sensor_msgs::msg::Joy>::SharedPtr> button_states_pubs_map;
+    rclcpp::Subscription<sensor_msgs::msg::JoyFeedback>::SharedPtr feedback_sub_;
 };
 
 OPEN_VRnode::OPEN_VRnode(int rate)
@@ -478,10 +480,19 @@ OPEN_VRnode::OPEN_VRnode(int rate)
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(nh_);
   tf_buffer_ = std::make_unique<tf2_ros::Buffer>(nh_.get_clock());
   tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
-  nh_.getParam("/open_vr/world_offset", world_offset_);
-  nh_.getParam("/open_vr/world_yaw", world_yaw_);
+
+  // declare parameters
+  nh_.declare_parameter("/open_vr/world_offset", rclcpp::PARAMETER_DOUBLE_ARRAY);
+  nh_.declare_parameter("/open_vr/world_yaw", rclcpp::PARAMETER_DOUBLE);
+
+
+  // get parameters
+  world_offset_ = nh_.get_parameter("/open_vr/world_offset").as_double_array();
+  world_yaw_ = nh_.get_parameter("/open_vr/world_yaw").as_double();
+
+  // rest of constructor
   RCLCPP_INFO(nh_.get_logger(), " [OPEN_VR] World offset: [%2.3f , %2.3f, %2.3f] %2.3f", world_offset_[0], world_offset_[1], world_offset_[2], world_yaw_);
-  set_origin_server_ = nh_.advertiseService("/open_vr/set_origin", &OPEN_VRnode::setOriginCB, this);
+  set_origin_server_ = nh_.create_service<std_srvs::srv::Empty>("/open_vr/set_origin", &OPEN_VRnode::setOriginCB);
   twist0_pub_ = nh_.create_publisher<geometry_msgs::msg::TwistStamped>("/open_vr/twist0", 10);
   twist1_pub_ = nh_.create_publisher<geometry_msgs::msg::TwistStamped>("/open_vr/twist1", 10);
   twist2_pub_ = nh_.create_publisher<geometry_msgs::msg::TwistStamped>("/open_vr/twist2", 10);
@@ -551,7 +562,7 @@ bool OPEN_VRnode::setOriginCB(std_srvs::srv::Empty::Request& req, std_srvs::srv:
   c_z = rot_matrix*tf2::Vector3(0,0,1);
   c_z[1] = 0;
   c_z.normalize();
-  double new_yaw = acos(tf2::Vector3(0,0,1).dot(c_z)) + ;
+  double new_yaw = acos(tf2::Vector3(0,0,1).dot(c_z)) + M_PI_2;
   if (c_z[0] < 0) new_yaw = -new_yaw;
   world_yaw_ = -new_yaw;
 
@@ -564,8 +575,8 @@ bool OPEN_VRnode::setOriginCB(std_srvs::srv::Empty::Request& req, std_srvs::srv:
   world_offset_[1] = new_offset[1];
   world_offset_[2] = new_offset[2];
 
-  nh_.setParam("/open_vr/world_offset", world_offset_);
-  nh_.setParam("/open_vr/world_yaw", world_yaw_);
+  world_offset_ = nh_.get_parameter("/open_vr/world_offset").as_double_array();
+  world_yaw_ = nh_.get_parameter("/open_vr/world_yaw").as_double();
   RCLCPP_INFO(nh_.get_logger(), " [OPEN_VR] New world offset: [%2.3f , %2.3f, %2.3f] %2.3f", world_offset_[0], world_offset_[1], world_offset_[2], world_yaw_);
 
   return true;
@@ -651,9 +662,9 @@ void OPEN_VRnode::Run()
 //        std::cout << static_cast<std::bitset<64> >(state.ulButtonPressed) << std::endl;
 //        std::cout << static_cast<std::bitset<64> >(state.ulButtonTouched) << std::endl;
         if(button_states_pubs_map.count(cur_sn) == 0){
-          button_states_pubs_map[cur_sn] = nh_.advertise<sensor_msgs::msg::Joy>("/open_vr/controller_"+cur_sn+"/joy", 10);
+          button_states_pubs_map[cur_sn] = nh_.create_publisher<sensor_msgs::msg::Joy>("/open_vr/controller_"+cur_sn+"/joy", 10);
         }
-        button_states_pubs_map[cur_sn].publish(joy);
+        button_states_pubs_map[cur_sn]->publish(joy);
       }
       // It's a tracker
       if (dev_type == 3)

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.8)
 project(open_vr_ros)
 
 ## set definition, path, compileflags
@@ -82,11 +82,9 @@ find_package(image_transport REQUIRED)
 
 set(CMAKE_BUILD_TYPE "Release")
 
-catkin_package()
 
 include_directories(
   include
-  ${catkin_INCLUDE_DIRS}
 )
 
 # open_vr node:
@@ -95,10 +93,10 @@ add_executable(open_vr_node
   src/open_vr_node.cpp
   src/vr_interface.cpp
 )
+ament_target_dependencies(open_vr_node rclcpp std_msgs tf2 tf2_ros geometry_msgs cv_bridge image_transport)
 
 ## link all
 target_link_libraries(open_vr_node
-  ${catkin_LIBRARIES}
   ${OPENGL_LIBRARIES} ## (OpenGL specific)
   ${GLEW_LIBRARIES} ## (OpenGL specific)
   ${VULKAN_LIBRARY} ## (Vulkan specific)
@@ -107,3 +105,7 @@ target_link_libraries(open_vr_node
   ${CMAKE_DL_LIBS}
   ${EXTRA_LIBS}
 )
+
+
+ament_export_include_directories(include)
+ament_package()
