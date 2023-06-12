@@ -69,15 +69,16 @@ include_directories(
   ${VULKAN_INCLUDE_DIR} ## (Vulkan specific)
 )
 
-## Find catkin macros and libraries
-find_package(catkin REQUIRED COMPONENTS
-  roscpp
-  tf
-  std_srvs
-  geometry_msgs
-  cv_bridge
-  image_transport
-)
+## Find colcon packages
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(cv_bridge REQUIRED)
+find_package(image_transport REQUIRED)
+
 
 set(CMAKE_BUILD_TYPE "Release")
 
