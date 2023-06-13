@@ -2,14 +2,14 @@
 #include <rclcpp/rclcpp.hpp>
 #include <signal.h>
 #include "tf2_ros/transform_broadcaster.h"
-#include "tf2_geometry_msgs.hpp"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 #include "tf2_ros/transform_listener.h"
 #include "tf2_ros/buffer.h"
 #include <sensor_msgs/msg/joy.hpp>
 #include <sensor_msgs/msg/joy_feedback.hpp>
 #include <std_srvs/srv/empty.hpp>
 #include <iostream>
-#include "open_vr_ros/vr_interface.h"
+#include "vr_interface.h"
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include "geometry_msgs/msg/transform_stamped.hpp"
 
@@ -18,6 +18,8 @@
 #include <math.h>
 
 using namespace std;
+using std::placeholders::_1;
+
 
 
 void mySigintHandler(int sig){
@@ -438,8 +440,8 @@ class OPEN_VRnode
     bool Init();
     void Run();
     void Shutdown();
-    bool setOriginCB(std_srvs::srv::Empty::Request& req, std_srvs::srv::Empty::Response& res);
-    void set_feedback(sensor_msgs::msg::JoyFeedback::ConstPtr msg);
+    bool setOriginCB(const std::shared_ptr<std_srvs::srv::Empty::Request> req, std::shared_ptr<std_srvs::srv::Empty::Response> res);
+    void set_feedback(const sensor_msgs::msg::JoyFeedback::ConstPtr msg);
     rclcpp::Node nh_;
     VRInterface vr_;
 
@@ -487,16 +489,16 @@ OPEN_VRnode::OPEN_VRnode(int rate)
 
 
   // get parameters
-  world_offset_ = nh_.get_parameter("/open_vr/world_offset").as_double_array();
-  world_yaw_ = nh_.get_parameter("/open_vr/world_yaw").as_double();
+  // world_offset_ = nh_.get_parameter("/open_vr/world_offset").as_double_array();
+  // world_yaw_ = nh_.get_parameter("/open_vr/world_yaw").as_double();
 
   // rest of constructor
   RCLCPP_INFO(nh_.get_logger(), " [OPEN_VR] World offset: [%2.3f , %2.3f, %2.3f] %2.3f", world_offset_[0], world_offset_[1], world_offset_[2], world_yaw_);
-  set_origin_server_ = nh_.create_service<std_srvs::srv::Empty>("/open_vr/set_origin", &OPEN_VRnode::setOriginCB);
+  // set_origin_server_ = nh_.create_service<std_srvs::srv::Empty>("/open_vr/set_origin", &OPEN_VRnode::setOriginCB);
   twist0_pub_ = nh_.create_publisher<geometry_msgs::msg::TwistStamped>("/open_vr/twist0", 10);
   twist1_pub_ = nh_.create_publisher<geometry_msgs::msg::TwistStamped>("/open_vr/twist1", 10);
   twist2_pub_ = nh_.create_publisher<geometry_msgs::msg::TwistStamped>("/open_vr/twist2", 10);
-  feedback_sub_ = nh_.create_subscription<sensor_msgs::msg::JoyFeedback>("/open_vr/set_feedback", 10, std::bind(&OPEN_VRnode::set_feedback, this));
+  feedback_sub_ = nh_.create_subscription<sensor_msgs::msg::JoyFeedback>("/open_vr/set_feedback", 10, std::bind(&OPEN_VRnode::set_feedback, this, _1));
 
 #ifdef USE_IMAGE
   image_transport::ImageTransport it(nh_);
@@ -541,7 +543,7 @@ void OPEN_VRnode::Shutdown()
   vr_.Shutdown();
 }
 
-bool OPEN_VRnode::setOriginCB(std_srvs::srv::Empty::Request& req, std_srvs::srv::Empty::Response& res)
+bool OPEN_VRnode::setOriginCB(const std::shared_ptr<std_srvs::srv::Empty::Request> req, std::shared_ptr<std_srvs::srv::Empty::Response> res)
 {
   double tf_matrix[3][4];
   int index = 1, dev_type;
@@ -575,14 +577,14 @@ bool OPEN_VRnode::setOriginCB(std_srvs::srv::Empty::Request& req, std_srvs::srv:
   world_offset_[1] = new_offset[1];
   world_offset_[2] = new_offset[2];
 
-  world_offset_ = nh_.get_parameter("/open_vr/world_offset").as_double_array();
-  world_yaw_ = nh_.get_parameter("/open_vr/world_yaw").as_double();
+  // world_offset_ = nh_.get_parameter("/open_vr/world_offset").as_double_array();
+  // world_yaw_ = nh_.get_parameter("/open_vr/world_yaw").as_double();
   RCLCPP_INFO(nh_.get_logger(), " [OPEN_VR] New world offset: [%2.3f , %2.3f, %2.3f] %2.3f", world_offset_[0], world_offset_[1], world_offset_[2], world_yaw_);
 
   return true;
 }
 
-void OPEN_VRnode::set_feedback(sensor_msgs::msg::JoyFeedback::ConstPtr msg) {
+void OPEN_VRnode::set_feedback(const sensor_msgs::msg::JoyFeedback::ConstPtr msg) {
   if(msg->type == 1 /* TYPE_RUMBLE */) {
     vr_.TriggerHapticPulse(msg->id, 0, (int)(msg->intensity));
     for(int i=0;i<16;i++)

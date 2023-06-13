@@ -1,7 +1,7 @@
 #include <iostream>
 #include <string>
 #include <map>
-#include "open_vr_ros/vr_interface.h"
+#include "vr_interface.h"
 
 inline void defaultDebugMsgCallback(const std::string &msg) {
     std::cerr << "OPEN_VR Debug: " << msg << std::endl;
