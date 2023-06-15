@@ -29,21 +29,22 @@ void mySigintHandler(int sig){
 rclcpp::shutdown();
 }
 
-//#define USE_IMAGE
+#define USE_IMAGE
 
 #define USE_OPENGL
 //#define USE_VULKAN
 
 #ifdef USE_IMAGE
-#include <image_transport/image_transport.h>
-#include <sensor_msgs/Image.h>
-#include <sensor_msgs/CameraInfo.h>
+#include <image_transport/image_transport.hpp>
+#include <sensor_msgs/msg/image.hpp>
+#include <sensor_msgs/msg/camera_info.hpp>
 #include <cv_bridge/cv_bridge.h>
 enum {X, Y, XY};
 enum {L, R, LR};
 
 #if defined USE_OPENGL
-#include "open_vr_ros/hellovr_opengl_main.h"
+#include "hellovr_opengl_main.h"
+#undef main // following this: https://stackoverflow.com/questions/6847360/error-lnk2019-unresolved-external-symbol-main-referenced-in-function-tmainc
 class CMainApplicationMod : public CMainApplication{
   public:
     CMainApplicationMod( int argc, char *argv[] )
@@ -77,7 +78,7 @@ class CMainApplicationMod : public CMainApplication{
       }
     }
     void RenderFrame(){
-      rclcpp::Time tmp = nh_ptr_->get_clock()->now();
+      // rclcpp::Time tmp = nh_ptr_->get_clock()->now();
       if ( m_pHMD ){
         RenderControllerAxes();
         RenderStereoTargets();
@@ -102,7 +103,7 @@ class CMainApplicationMod : public CMainApplication{
         dprintf( "PoseCount:%d(%s) Controllers:%d\n", m_iValidPoseCount, m_strPoseClasses.c_str(), m_iTrackedControllerCount );
       }
       UpdateHMDMatrixPose();
-      ROS_INFO_THROTTLE(3.0,"RenderFrame() @ %d [fps]", [](int& cin, int dur){int ans = cin; cin=0; return ans/dur;}(RenderFrame_hz_count, 3));
+      // ROS_INFO_THROTTLE(3.0,"RenderFrame() @ %d [fps]", [](int& cin, int dur){int ans = cin; cin=0; return ans/dur;}(RenderFrame_hz_count, 3));
       RenderFrame_hz_count++;
     }
 
@@ -116,7 +117,7 @@ class CMainApplicationMod : public CMainApplication{
       int cam_pic_size_on_hmd[LR][XY];
       cv::Mat hmd_panel_roi[LR];
       for(int i=0;i<LR;i++){
-        ROS_INFO_THROTTLE(3.0,"Process ROS image[%d] (%dx%d) with fov (%dx%d) to (%dx%d)", i, in[i].cols, in[i].rows, (int)cam_f[i][X], (int)cam_f[i][Y], out[i].cols, out[i].rows);
+        // ROS_INFO_THROTTLE(3.0,"Process ROS image[%d] (%dx%d) with fov (%dx%d) to (%dx%d)", i, in[i].cols, in[i].rows, (int)cam_f[i][X], (int)cam_f[i][Y], out[i].cols, out[i].rows);
         for(int j=0;j<XY;j++){
           cam_fov[i][j] = 2 * atan( cam_pic_size[i][j]/2 / cam_f[i][j] );
           cam_pic_size_on_hmd[i][j] = (int)( hmd_eye2panel_z[X] * 2 * tan(cam_fov[i][j]/2) );
@@ -129,7 +130,7 @@ class CMainApplicationMod : public CMainApplication{
         cv::Rect cropped_rect;
         if( !hmd_panel_area_rect.contains( cv::Point(ros_img_resized_rect.x, ros_img_resized_rect.y) )
             || !hmd_panel_area_rect.contains( cv::Point(ros_img_resized_rect.x+ros_img_resized_rect.width,ros_img_resized_rect.y+ros_img_resized_rect.height) ) ){
-          ROS_WARN_THROTTLE(3.0,"Resized ROS image[%d] (%dx%d) exceed HMD eye texture (%dx%d) -> Cropping",i,cam_pic_size_on_hmd[i][X],cam_pic_size_on_hmd[i][Y],m_nRenderWidth,m_nRenderHeight);
+          // RCLCPP_WARN_THROTTLE(nh_ptr_->get_logger(), *nh_ptr_->get_clock(), 3000,"Resized ROS image[%d] (%dx%d) exceed HMD eye texture (%dx%d) -> Cropping",i,cam_pic_size_on_hmd[i][X],cam_pic_size_on_hmd[i][Y],m_nRenderWidth,m_nRenderHeight);
           cropped_rect = ros_img_resized_rect & hmd_panel_area_rect;
           ros_img_resized[i] = ros_img_resized[i](cropped_rect);
         }
@@ -446,13 +447,13 @@ class OPEN_VRnode
     VRInterface vr_;
 
 #ifdef USE_IMAGE
-    void imageCb_L(const sensor_msgs::msg::ImageConstPtr& msg);
-    void imageCb_R(const sensor_msgs::msg::ImageConstPtr& msg);
-    void infoCb_L(const sensor_msgs::msg::CameraInfoConstPtr& msg);
-    void infoCb_R(const sensor_msgs::msg::CameraInfoConstPtr& msg);
+    void imageCb_L(const sensor_msgs::msg::Image::ConstPtr msg);
+    void imageCb_R(const sensor_msgs::msg::Image::ConstPtr msg);
+    void infoCb_L(const sensor_msgs::msg::CameraInfo::ConstPtr msg);
+    void infoCb_R(const sensor_msgs::msg::CameraInfo::ConstPtr msg);
     CMainApplicationMod *pMainApplication;
-    image_transport::Subscriber sub_L,sub_R;
-    rclcpp::Subscriber sub_i_L,sub_i_R;
+    image_transport::Subscriber sub_L, sub_R;
+    rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr sub_i_L, sub_i_R;
 #endif
 
   private:
@@ -501,11 +502,12 @@ OPEN_VRnode::OPEN_VRnode(int rate)
   feedback_sub_ = nh_ptr_->create_subscription<sensor_msgs::msg::JoyFeedback>("/open_vr/set_feedback", 10, std::bind(&OPEN_VRnode::set_feedback, this, _1));
 
 #ifdef USE_IMAGE
-  image_transport::ImageTransport it(nh_);
-  sub_L = it.subscribe("/image_left", 1, &OPEN_VRnode::imageCb_L, this);
-  sub_R = it.subscribe("/image_right", 1, &OPEN_VRnode::imageCb_R, this);
-  sub_i_L = nh_ptr_->subscribe("/camera_info_left", 1, &OPEN_VRnode::infoCb_L, this);
-  sub_i_R = nh_ptr_->subscribe("/camera_info_right", 1, &OPEN_VRnode::infoCb_R, this);
+  image_transport::ImageTransport it(nh_ptr_);
+  sub_L = it.subscribe("/image_left", 1, std::bind(&OPEN_VRnode::imageCb_L, this, _1));
+  sub_R = it.subscribe("/image_right", 1, std::bind(&OPEN_VRnode::imageCb_R, this, _1));
+  
+  sub_i_L = nh_ptr_->create_subscription<sensor_msgs::msg::CameraInfo>("/camera_info_left", 1, std::bind(&OPEN_VRnode::infoCb_L, this, _1));
+  sub_i_R = nh_ptr_->create_subscription<sensor_msgs::msg::CameraInfo>("/camera_info_right", 1, std::bind(&OPEN_VRnode::infoCb_R, this, _1));
   pMainApplication = new CMainApplicationMod( 0, NULL );
   if (!pMainApplication->BInit()){
     pMainApplication->Shutdown();
@@ -577,8 +579,8 @@ bool OPEN_VRnode::setOriginCB(const std::shared_ptr<std_srvs::srv::Empty::Reques
   world_offset_[1] = new_offset[1];
   world_offset_[2] = new_offset[2];
 
-  // world_offset_ = nh_ptr_->get_parameter("/open_vr/world_offset").as_double_array();
-  // world_yaw_ = nh_ptr_->get_parameter("/open_vr/world_yaw").as_double();
+  world_offset_ = nh_ptr_->get_parameter("/open_vr/world_offset").as_double_array();
+  world_yaw_ = nh_ptr_->get_parameter("/open_vr/world_yaw").as_double();
   RCLCPP_INFO(nh_ptr_->get_logger(), " [OPEN_VR] New world offset: [%2.3f , %2.3f, %2.3f] %2.3f", world_offset_[0], world_offset_[1], world_offset_[2], world_yaw_);
 
   return true;
@@ -666,7 +668,7 @@ void OPEN_VRnode::Run()
         if(button_states_pubs_map.count(cur_sn) == 0){
           button_states_pubs_map[cur_sn] = nh_ptr_->create_publisher<sensor_msgs::msg::Joy>("/open_vr/controller_"+cur_sn+"/joy", 10);
         }
-        // button_states_pubs_map[cur_sn]->publish(joy);
+        button_states_pubs_map[cur_sn]->publish(joy);
       }
       // It's a tracker
       if (dev_type == 3)
@@ -713,7 +715,7 @@ void OPEN_VRnode::Run()
         twist_msg_stamped.header.frame_id = "world_open_vr";
         twist_msg_stamped.twist = twist_msg;
 
-        // twist0_pub_->publish(twist_msg_stamped);
+        twist0_pub_->publish(twist_msg_stamped);
      
         // std::cout<<"HMD:";
         // std::cout<<twist_msg_stamped;
@@ -733,7 +735,7 @@ void OPEN_VRnode::Run()
         twist_msg_stamped.header.frame_id = "world_open_vr";
         twist_msg_stamped.twist = twist_msg;
 
-        // twist1_pub_->publish(twist_msg_stamped);
+        twist1_pub_->publish(twist_msg_stamped);
      
         // std::cout<<"Controller 1:";
         // std::cout<<twist_msg_stamped;
@@ -753,7 +755,7 @@ void OPEN_VRnode::Run()
         twist_msg_stamped.header.frame_id = "world_open_vr";
         twist_msg_stamped.twist = twist_msg;
 
-        // twist2_pub_->publish(twist_msg_stamped);
+        twist2_pub_->publish(twist_msg_stamped);
      
         // std::cout<<"Controller 2:";
         // std::cout<<twist_msg_stamped;
@@ -772,42 +774,42 @@ void OPEN_VRnode::Run()
 }
 
 #ifdef USE_IMAGE
-void OPEN_VRnode::imageCb_L(const sensor_msgs::msg::ImageConstPtr& msg){
+void OPEN_VRnode::imageCb_L(const sensor_msgs::msg::Image::ConstPtr msg){
   if(msg->width > 0 && msg->height > 0 ){
     try {
       pMainApplication->ros_img[L] = cv_bridge::toCvCopy(msg,"rgb8")->image;
     } catch (cv_bridge::Exception& e) {
-      ROS_ERROR_THROTTLE(1, "Unable to convert '%s' image for display: '%s'", msg->encoding.c_str(), e.what());
+      RCLCPP_ERROR_THROTTLE(nh_ptr_->get_logger(), *nh_ptr_->get_clock(), 1000, "Unable to convert '%s' image for display: '%s'", msg->encoding.c_str(), e.what());
     }
   }else{
-    ROS_WARN_THROTTLE(3, "Invalid image_left size (%dx%d) use default", msg->width, msg->height);
+    RCLCPP_WARN_THROTTLE(nh_ptr_->get_logger(), *nh_ptr_->get_clock(), 3000, "Invalid image_left size (%dx%d) use default", msg->width, msg->height);
   }
 }
-void OPEN_VRnode::imageCb_R(const sensor_msgs::msg::ImageConstPtr& msg){
+void OPEN_VRnode::imageCb_R(const sensor_msgs::msg::Image::ConstPtr msg){
   if(msg->width > 0 && msg->height > 0 ){
     try {
       pMainApplication->ros_img[R] = cv_bridge::toCvCopy(msg,"rgb8")->image;
     } catch (cv_bridge::Exception& e) {
-      ROS_ERROR_THROTTLE(1, "Unable to convert '%s' image for display: '%s'", msg->encoding.c_str(), e.what());
+      RCLCPP_ERROR_THROTTLE(nh_ptr_->get_logger(), *nh_ptr_->get_clock(), 1000, "Unable to convert '%s' image for display: '%s'", msg->encoding.c_str(), e.what());
     }
   }else{
-    ROS_WARN_THROTTLE(3, "Invalid image_right size (%dx%d) use default", msg->width, msg->height);
+    RCLCPP_WARN_THROTTLE(nh_ptr_->get_logger(), *nh_ptr_->get_clock(), 3000, "Invalid image_right size (%dx%d) use default", msg->width, msg->height);
   }
 }
-void OPEN_VRnode::infoCb_L(const sensor_msgs::msg::CameraInfoConstPtr& msg){
-  if(msg->K[0] > 0.0 && msg->K[4] > 0.0 ){
-    pMainApplication->cam_f[L][0] = msg->K[0];
-    pMainApplication->cam_f[L][1] = msg->K[4];
+void OPEN_VRnode::infoCb_L(const sensor_msgs::msg::CameraInfo::ConstPtr msg){
+  if(msg->k[0] > 0.0 && msg->k[4] > 0.0 ){
+    pMainApplication->cam_f[L][0] = msg->k[0];
+    pMainApplication->cam_f[L][1] = msg->k[4];
   }else{
-    ROS_WARN_THROTTLE(3, "Invalid camera_info_left fov (%fx%f) use default", msg->K[0], msg->K[4]);
+    RCLCPP_WARN_THROTTLE(nh_ptr_->get_logger(), *nh_ptr_->get_clock(), 3000, "Invalid camera_info_left fov (%fx%f) use default", msg->k[0], msg->k[4]);
   }
 }
-void OPEN_VRnode::infoCb_R(const sensor_msgs::msg::CameraInfoConstPtr& msg){
-  if(msg->K[0] > 0.0 && msg->K[4] > 0.0 ){
-    pMainApplication->cam_f[R][0] = msg->K[0];
-    pMainApplication->cam_f[R][1] = msg->K[4];
+void OPEN_VRnode::infoCb_R(const sensor_msgs::msg::CameraInfo::ConstPtr msg){
+  if(msg->k[0] > 0.0 && msg->k[4] > 0.0 ){
+    pMainApplication->cam_f[R][0] = msg->k[0];
+    pMainApplication->cam_f[R][1] = msg->k[4];
   }else{
-    ROS_WARN_THROTTLE(3, "Invalid camera_info_right fov (%fx%f) use default", msg->K[0], msg->K[4]);
+    RCLCPP_WARN_THROTTLE(nh_ptr_->get_logger(), *nh_ptr_->get_clock(), 3000, "Invalid camera_info_right fov (%fx%f) use default", msg->k[0], msg->k[4]);
   }
 }
 #endif

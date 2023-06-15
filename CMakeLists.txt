@@ -3,9 +3,8 @@ project(open_vr_ros)
 
 ## set definition, path, compileflags
 add_definitions(-DWIN -DWIN64)
-set(HOME "C:/Users/NU-Haptics")
-set(HEADERS ${HOME}/ws_dexterity/src/open_vr_ros/include/open_vr_ros)
-set(OPENVR ${HOME}"/libraries/openvr")
+file(TO_CMAKE_PATH $ENV{HOME} HOME) # converts \ to / for os cross-compatability
+set(OPENVR ${HOME}/libraries/openvr)
 add_definitions(-DOPENVR_PATH="${OPENVR}") ## for source code to get sample textures and shader files path
 set(THIRDPARTY_DIR ${OPENVR}/samples/thirdparty)
 set(SHARED_SRC_DIR ${OPENVR}/samples/shared)
@@ -62,6 +61,17 @@ find_library(VULKAN_LIBRARY
 )
 set(VULKAN_INCLUDE_DIR ${THIRDPARTY_DIR}/vulkan-1.0.49.0/include)
 
+
+## debugging
+message("\n\n\n" 
+  ${SDL2_INCLUDE_DIR}
+  ${OPENVR_INCLUDE_DIR}
+  ${OPENGL_INCLUDE_DIR} ## (OpenGL specific)
+  ${GLEW_INCLUDE_DIR} ## (OpenGL specific)
+  ${VULKAN_INCLUDE_DIR} ## (Vulkan specific)
+"\n\n\n"
+)
+
 ## add include path
 include_directories(
   ${CMAKE_SOURCE_DIR}/include/${PROJECT_NAME}
@@ -93,7 +103,6 @@ add_executable(open_vr_node
   "src/vr_interface.cpp"
 )
 target_include_directories(open_vr_node PUBLIC
-  "C:/Users/NU-Haptics/libraries/openvr/headers"
   ${SDL2_INCLUDE_DIR}
   ${OPENVR_INCLUDE_DIR}
   ${OPENGL_INCLUDE_DIR} ## (OpenGL specific)
