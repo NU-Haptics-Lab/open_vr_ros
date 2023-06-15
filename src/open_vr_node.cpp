@@ -77,7 +77,7 @@ class CMainApplicationMod : public CMainApplication{
       }
     }
     void RenderFrame(){
-      rclcpp::Time tmp = nh_.get_clock()->now();
+      rclcpp::Time tmp = nh_ptr_->get_clock()->now();
       if ( m_pHMD ){
         RenderControllerAxes();
         RenderStereoTargets();
@@ -442,7 +442,7 @@ class OPEN_VRnode
     void Shutdown();
     bool setOriginCB(const std::shared_ptr<std_srvs::srv::Empty::Request> req, std::shared_ptr<std_srvs::srv::Empty::Response> res);
     void set_feedback(const sensor_msgs::msg::JoyFeedback::ConstPtr msg);
-    rclcpp::Node nh_;
+    rclcpp::Node::SharedPtr nh_ptr_;
     VRInterface vr_;
 
 #ifdef USE_IMAGE
@@ -474,38 +474,38 @@ class OPEN_VRnode
 
 OPEN_VRnode::OPEN_VRnode(int rate)
   : loop_rate_(rate)
-  , nh_("open_vr_node")
   , vr_()
   , world_offset_({0, 0, 0})
   , world_yaw_(0)
 {
-  tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(nh_);
-  tf_buffer_ = std::make_unique<tf2_ros::Buffer>(nh_.get_clock());
+  nh_ptr_ = rclcpp::Node::make_shared("open_vr_node");
+  tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(nh_ptr_);
+  tf_buffer_ = std::make_unique<tf2_ros::Buffer>(nh_ptr_->get_clock());
   tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
   // declare parameters
-  nh_.declare_parameter("/open_vr/world_offset", rclcpp::PARAMETER_DOUBLE_ARRAY);
-  nh_.declare_parameter("/open_vr/world_yaw", rclcpp::PARAMETER_DOUBLE);
+  nh_ptr_->declare_parameter("/open_vr/world_offset", rclcpp::PARAMETER_DOUBLE_ARRAY);
+  nh_ptr_->declare_parameter("/open_vr/world_yaw", rclcpp::PARAMETER_DOUBLE);
 
 
   // get parameters
-  // world_offset_ = nh_.get_parameter("/open_vr/world_offset").as_double_array();
-  // world_yaw_ = nh_.get_parameter("/open_vr/world_yaw").as_double();
+  // world_offset_ = nh_ptr_->get_parameter("/open_vr/world_offset").as_double_array();
+  // world_yaw_ = nh_ptr_->get_parameter("/open_vr/world_yaw").as_double();
 
   // rest of constructor
-  RCLCPP_INFO(nh_.get_logger(), " [OPEN_VR] World offset: [%2.3f , %2.3f, %2.3f] %2.3f", world_offset_[0], world_offset_[1], world_offset_[2], world_yaw_);
-  // set_origin_server_ = nh_.create_service<std_srvs::srv::Empty>("/open_vr/set_origin", &OPEN_VRnode::setOriginCB);
-  twist0_pub_ = nh_.create_publisher<geometry_msgs::msg::TwistStamped>("/open_vr/twist0", 10);
-  twist1_pub_ = nh_.create_publisher<geometry_msgs::msg::TwistStamped>("/open_vr/twist1", 10);
-  twist2_pub_ = nh_.create_publisher<geometry_msgs::msg::TwistStamped>("/open_vr/twist2", 10);
-  feedback_sub_ = nh_.create_subscription<sensor_msgs::msg::JoyFeedback>("/open_vr/set_feedback", 10, std::bind(&OPEN_VRnode::set_feedback, this, _1));
+  RCLCPP_INFO(nh_ptr_->get_logger(), " [OPEN_VR] World offset: [%2.3f , %2.3f, %2.3f] %2.3f", world_offset_[0], world_offset_[1], world_offset_[2], world_yaw_);
+  // set_origin_server_ = nh_ptr_->create_service<std_srvs::srv::Empty>("/open_vr/set_origin", &OPEN_VRnode::setOriginCB);
+  twist0_pub_ = nh_ptr_->create_publisher<geometry_msgs::msg::TwistStamped>("/open_vr/twist0", 10);
+  twist1_pub_ = nh_ptr_->create_publisher<geometry_msgs::msg::TwistStamped>("/open_vr/twist1", 10);
+  twist2_pub_ = nh_ptr_->create_publisher<geometry_msgs::msg::TwistStamped>("/open_vr/twist2", 10);
+  feedback_sub_ = nh_ptr_->create_subscription<sensor_msgs::msg::JoyFeedback>("/open_vr/set_feedback", 10, std::bind(&OPEN_VRnode::set_feedback, this, _1));
 
 #ifdef USE_IMAGE
   image_transport::ImageTransport it(nh_);
   sub_L = it.subscribe("/image_left", 1, &OPEN_VRnode::imageCb_L, this);
   sub_R = it.subscribe("/image_right", 1, &OPEN_VRnode::imageCb_R, this);
-  sub_i_L = nh_.subscribe("/camera_info_left", 1, &OPEN_VRnode::infoCb_L, this);
-  sub_i_R = nh_.subscribe("/camera_info_right", 1, &OPEN_VRnode::infoCb_R, this);
+  sub_i_L = nh_ptr_->subscribe("/camera_info_left", 1, &OPEN_VRnode::infoCb_L, this);
+  sub_i_R = nh_ptr_->subscribe("/camera_info_right", 1, &OPEN_VRnode::infoCb_R, this);
   pMainApplication = new CMainApplicationMod( 0, NULL );
   if (!pMainApplication->BInit()){
     pMainApplication->Shutdown();
@@ -553,7 +553,7 @@ bool OPEN_VRnode::setOriginCB(const std::shared_ptr<std_srvs::srv::Empty::Reques
   }
   if (dev_type == 0) 
   {
-    RCLCPP_WARN(nh_.get_logger(), " [OPEN_VR] Coulnd't find controller 1.");
+    RCLCPP_WARN(nh_ptr_->get_logger(), " [OPEN_VR] Coulnd't find controller 1.");
     return false;
   }
 
@@ -577,9 +577,9 @@ bool OPEN_VRnode::setOriginCB(const std::shared_ptr<std_srvs::srv::Empty::Reques
   world_offset_[1] = new_offset[1];
   world_offset_[2] = new_offset[2];
 
-  // world_offset_ = nh_.get_parameter("/open_vr/world_offset").as_double_array();
-  // world_yaw_ = nh_.get_parameter("/open_vr/world_yaw").as_double();
-  RCLCPP_INFO(nh_.get_logger(), " [OPEN_VR] New world offset: [%2.3f , %2.3f, %2.3f] %2.3f", world_offset_[0], world_offset_[1], world_offset_[2], world_yaw_);
+  // world_offset_ = nh_ptr_->get_parameter("/open_vr/world_offset").as_double_array();
+  // world_yaw_ = nh_ptr_->get_parameter("/open_vr/world_yaw").as_double();
+  RCLCPP_INFO(nh_ptr_->get_logger(), " [OPEN_VR] New world offset: [%2.3f , %2.3f, %2.3f] %2.3f", world_offset_[0], world_offset_[1], world_offset_[2], world_yaw_);
 
   return true;
 }
@@ -596,7 +596,7 @@ void OPEN_VRnode::Run()
 {
   double tf_matrix[3][4];
   int run_hz_count = 0;
-
+  
   while (rclcpp::ok())
   {
     // do stuff
@@ -630,20 +630,20 @@ void OPEN_VRnode::Run()
       if (dev_type == 1)
       {
         geometry_msgs::msg::Transform msg_tf = tf2::toMsg(tf);
-        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_.get_clock()->now(); tfs.header.frame_id = "world_open_vr"; tfs.child_frame_id = "hmd";
+        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "world_open_vr"; tfs.child_frame_id = "hmd";
         tf_broadcaster_->sendTransform(tfs);
       }
       // It's a controller
       if (dev_type == 2)
       {
         geometry_msgs::msg::Transform msg_tf = tf2::toMsg(tf);
-        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_.get_clock()->now(); tfs.header.frame_id = "world_open_vr"; tfs.child_frame_id = "controller_"+cur_sn;
+        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "world_open_vr"; tfs.child_frame_id = "controller_"+cur_sn;
         tf_broadcaster_->sendTransform(tfs);
 
         vr::VRControllerState_t state;
         vr_.HandleInput(i, state);
         sensor_msgs::msg::Joy joy;
-        joy.header.stamp = nh_.get_clock()->now();
+        joy.header.stamp = nh_ptr_->get_clock()->now();
         joy.header.frame_id = "controller_"+cur_sn;
         joy.buttons.assign(BUTTON_NUM, 0);
         joy.axes.assign(AXES_NUM, 0.0); // x-axis, y-axis
@@ -664,22 +664,22 @@ void OPEN_VRnode::Run()
 //        std::cout << static_cast<std::bitset<64> >(state.ulButtonPressed) << std::endl;
 //        std::cout << static_cast<std::bitset<64> >(state.ulButtonTouched) << std::endl;
         if(button_states_pubs_map.count(cur_sn) == 0){
-          button_states_pubs_map[cur_sn] = nh_.create_publisher<sensor_msgs::msg::Joy>("/open_vr/controller_"+cur_sn+"/joy", 10);
+          button_states_pubs_map[cur_sn] = nh_ptr_->create_publisher<sensor_msgs::msg::Joy>("/open_vr/controller_"+cur_sn+"/joy", 10);
         }
-        button_states_pubs_map[cur_sn]->publish(joy);
+        // button_states_pubs_map[cur_sn]->publish(joy);
       }
       // It's a tracker
       if (dev_type == 3)
       {
         geometry_msgs::msg::Transform msg_tf = tf2::toMsg(tf);
-        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_.get_clock()->now(); tfs.header.frame_id = "world_open_vr"; tfs.child_frame_id = "tracker_"+cur_sn;
+        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "world_open_vr"; tfs.child_frame_id = "tracker_"+cur_sn;
         tf_broadcaster_->sendTransform(tfs);
       }
       // It's a lighthouse
       if (dev_type == 4)
       {
         geometry_msgs::msg::Transform msg_tf = tf2::toMsg(tf);
-        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_.get_clock()->now(); tfs.header.frame_id = "world_open_vr"; tfs.child_frame_id = "lighthouse_"+cur_sn;
+        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "world_open_vr"; tfs.child_frame_id = "lighthouse_"+cur_sn;
         tf_broadcaster_->sendTransform(tfs);
       }
 
@@ -693,7 +693,7 @@ void OPEN_VRnode::Run()
     tf_world.setRotation(quat_world);
 
     geometry_msgs::msg::Transform msg_tf = tf2::toMsg(tf_world);
-    geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_.get_clock()->now(); tfs.header.frame_id = "world"; tfs.child_frame_id = "world_open_vr";
+    geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "world"; tfs.child_frame_id = "world_open_vr";
     tf_broadcaster_->sendTransform(tfs);
 
     // Publish twist messages for controller1 and controller2
@@ -709,11 +709,11 @@ void OPEN_VRnode::Run()
         twist_msg.angular.z = ang_vel[2];
 
         geometry_msgs::msg::TwistStamped twist_msg_stamped;
-        twist_msg_stamped.header.stamp = nh_.get_clock()->now();
+        twist_msg_stamped.header.stamp = nh_ptr_->get_clock()->now();
         twist_msg_stamped.header.frame_id = "world_open_vr";
         twist_msg_stamped.twist = twist_msg;
 
-        twist0_pub_->publish(twist_msg_stamped);
+        // twist0_pub_->publish(twist_msg_stamped);
      
         // std::cout<<"HMD:";
         // std::cout<<twist_msg_stamped;
@@ -729,11 +729,11 @@ void OPEN_VRnode::Run()
         twist_msg.angular.z = ang_vel[2];
 
         geometry_msgs::msg::TwistStamped twist_msg_stamped;
-        twist_msg_stamped.header.stamp = nh_.get_clock()->now();
+        twist_msg_stamped.header.stamp = nh_ptr_->get_clock()->now();
         twist_msg_stamped.header.frame_id = "world_open_vr";
         twist_msg_stamped.twist = twist_msg;
 
-        twist1_pub_->publish(twist_msg_stamped);
+        // twist1_pub_->publish(twist_msg_stamped);
      
         // std::cout<<"Controller 1:";
         // std::cout<<twist_msg_stamped;
@@ -749,11 +749,11 @@ void OPEN_VRnode::Run()
         twist_msg.angular.z = ang_vel[2];
 
         geometry_msgs::msg::TwistStamped twist_msg_stamped;
-        twist_msg_stamped.header.stamp = nh_.get_clock()->now();
+        twist_msg_stamped.header.stamp = nh_ptr_->get_clock()->now();
         twist_msg_stamped.header.frame_id = "world_open_vr";
         twist_msg_stamped.twist = twist_msg;
 
-        twist2_pub_->publish(twist_msg_stamped);
+        // twist2_pub_->publish(twist_msg_stamped);
      
         // std::cout<<"Controller 2:";
         // std::cout<<twist_msg_stamped;
@@ -764,9 +764,9 @@ void OPEN_VRnode::Run()
     pMainApplication->RenderFrame();
 #endif
 
-    RCLCPP_INFO_THROTTLE(nh_.get_logger(), *nh_.get_clock(), 1.0, "Run() @ %d [fps]", [](int& cin){int ans = cin; cin=0; return ans;}(run_hz_count));
+    RCLCPP_INFO_THROTTLE(nh_ptr_->get_logger(), *nh_ptr_->get_clock(), 1000, "Run() @ %d [fps]", [](int& cin){int ans = cin; cin=0; return ans;}(run_hz_count));
     run_hz_count++;
-    rclcpp::spin_some(nh_.shared_from_this());
+    rclcpp::spin_some(nh_ptr_);
     loop_rate_.sleep();
   }
 }
@@ -817,13 +817,18 @@ void OPEN_VRnode::infoCb_R(const sensor_msgs::msg::CameraInfoConstPtr& msg){
 int main(int argc, char** argv){
   signal(SIGINT, mySigintHandler);
   rclcpp::init(argc, argv);
+  std::cout << "RCLCPP Init'd\n";
 
 #ifdef USE_IMAGE
   OPEN_VRnode nodeApp(90); // OPEN_VR display max fps
 #else
   OPEN_VRnode nodeApp(30);
+  std::cout << "Made Open_VR node class\n";
 #endif
-  if (!nodeApp.Init()){
+  bool init = nodeApp.Init();
+  std::cout << "nodeApp: init'd\n";
+
+  if (!init){
     nodeApp.Shutdown();
     return 1;
   }
