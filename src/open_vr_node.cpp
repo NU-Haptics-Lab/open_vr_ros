@@ -19,6 +19,7 @@
 
 using namespace std;
 using std::placeholders::_1;
+using std::placeholders::_2;
 
 
 
@@ -485,29 +486,29 @@ OPEN_VRnode::OPEN_VRnode(int rate)
   tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
   // declare parameters
-  nh_ptr_->declare_parameter("/open_vr/world_offset", rclcpp::PARAMETER_DOUBLE_ARRAY);
-  nh_ptr_->declare_parameter("/open_vr/world_yaw", rclcpp::PARAMETER_DOUBLE);
+  nh_ptr_->declare_parameter("open_vr/world_offset", world_offset_); // default values
+  nh_ptr_->declare_parameter("open_vr/world_yaw", world_yaw_); // default values
 
 
   // get parameters
-  // world_offset_ = nh_ptr_->get_parameter("/open_vr/world_offset").as_double_array();
-  // world_yaw_ = nh_ptr_->get_parameter("/open_vr/world_yaw").as_double();
+  world_offset_ = nh_ptr_->get_parameter("open_vr/world_offset").as_double_array();
+  world_yaw_ = nh_ptr_->get_parameter("open_vr/world_yaw").as_double();
 
   // rest of constructor
   RCLCPP_INFO(nh_ptr_->get_logger(), " [OPEN_VR] World offset: [%2.3f , %2.3f, %2.3f] %2.3f", world_offset_[0], world_offset_[1], world_offset_[2], world_yaw_);
-  // set_origin_server_ = nh_ptr_->create_service<std_srvs::srv::Empty>("/open_vr/set_origin", &OPEN_VRnode::setOriginCB);
-  twist0_pub_ = nh_ptr_->create_publisher<geometry_msgs::msg::TwistStamped>("/open_vr/twist0", 10);
-  twist1_pub_ = nh_ptr_->create_publisher<geometry_msgs::msg::TwistStamped>("/open_vr/twist1", 10);
-  twist2_pub_ = nh_ptr_->create_publisher<geometry_msgs::msg::TwistStamped>("/open_vr/twist2", 10);
-  feedback_sub_ = nh_ptr_->create_subscription<sensor_msgs::msg::JoyFeedback>("/open_vr/set_feedback", 10, std::bind(&OPEN_VRnode::set_feedback, this, _1));
+  set_origin_server_ = nh_ptr_->create_service<std_srvs::srv::Empty>("open_vr/set_origin", std::bind(&OPEN_VRnode::setOriginCB, this, _1, _2));
+  twist0_pub_ = nh_ptr_->create_publisher<geometry_msgs::msg::TwistStamped>("open_vr/twist0", 10);
+  twist1_pub_ = nh_ptr_->create_publisher<geometry_msgs::msg::TwistStamped>("open_vr/twist1", 10);
+  twist2_pub_ = nh_ptr_->create_publisher<geometry_msgs::msg::TwistStamped>("open_vr/twist2", 10);
+  feedback_sub_ = nh_ptr_->create_subscription<sensor_msgs::msg::JoyFeedback>("open_vr/set_feedback", 10, std::bind(&OPEN_VRnode::set_feedback, this, _1));
 
 #ifdef USE_IMAGE
   image_transport::ImageTransport it(nh_ptr_);
-  sub_L = it.subscribe("/image_left", 1, std::bind(&OPEN_VRnode::imageCb_L, this, _1));
-  sub_R = it.subscribe("/image_right", 1, std::bind(&OPEN_VRnode::imageCb_R, this, _1));
+  sub_L = it.subscribe("image_left", 1, std::bind(&OPEN_VRnode::imageCb_L, this, _1));
+  sub_R = it.subscribe("image_right", 1, std::bind(&OPEN_VRnode::imageCb_R, this, _1));
   
-  sub_i_L = nh_ptr_->create_subscription<sensor_msgs::msg::CameraInfo>("/camera_info_left", 1, std::bind(&OPEN_VRnode::infoCb_L, this, _1));
-  sub_i_R = nh_ptr_->create_subscription<sensor_msgs::msg::CameraInfo>("/camera_info_right", 1, std::bind(&OPEN_VRnode::infoCb_R, this, _1));
+  sub_i_L = nh_ptr_->create_subscription<sensor_msgs::msg::CameraInfo>("camera_info_left", 1, std::bind(&OPEN_VRnode::infoCb_L, this, _1));
+  sub_i_R = nh_ptr_->create_subscription<sensor_msgs::msg::CameraInfo>("camera_info_right", 1, std::bind(&OPEN_VRnode::infoCb_R, this, _1));
   pMainApplication = new CMainApplicationMod( 0, NULL );
   if (!pMainApplication->BInit()){
     pMainApplication->Shutdown();
@@ -548,16 +549,12 @@ void OPEN_VRnode::Shutdown()
 bool OPEN_VRnode::setOriginCB(const std::shared_ptr<std_srvs::srv::Empty::Request> req, std::shared_ptr<std_srvs::srv::Empty::Response> res)
 {
   double tf_matrix[3][4];
-  int index = 1, dev_type;
-  while (dev_type != 2) 
-  {
-    dev_type = vr_.GetDeviceMatrix(index++, tf_matrix);
-  }
-  if (dev_type == 0) 
-  {
-    RCLCPP_WARN(nh_ptr_->get_logger(), " [OPEN_VR] Coulnd't find controller 1.");
-    return false;
-  }
+  int index = 0, dev_type; // index = 0 should be the HMD
+  // It's a HMD
+  // +y is up
+  // +x is to the right
+  // -z is going away from you
+  dev_type = vr_.GetDeviceMatrix(0, tf_matrix);
 
   tf2::Matrix3x3 rot_matrix(tf_matrix[0][0], tf_matrix[0][1], tf_matrix[0][2],
                            tf_matrix[1][0], tf_matrix[1][1], tf_matrix[1][2],
@@ -579,8 +576,8 @@ bool OPEN_VRnode::setOriginCB(const std::shared_ptr<std_srvs::srv::Empty::Reques
   world_offset_[1] = new_offset[1];
   world_offset_[2] = new_offset[2];
 
-  world_offset_ = nh_ptr_->get_parameter("/open_vr/world_offset").as_double_array();
-  world_yaw_ = nh_ptr_->get_parameter("/open_vr/world_yaw").as_double();
+  nh_ptr_->set_parameter(rclcpp::Parameter("open_vr/world_offset", world_offset_));
+  nh_ptr_->set_parameter(rclcpp::Parameter("open_vr/world_yaw", world_yaw_));
   RCLCPP_INFO(nh_ptr_->get_logger(), " [OPEN_VR] New world offset: [%2.3f , %2.3f, %2.3f] %2.3f", world_offset_[0], world_offset_[1], world_offset_[2], world_yaw_);
 
   return true;
@@ -666,7 +663,7 @@ void OPEN_VRnode::Run()
 //        std::cout << static_cast<std::bitset<64> >(state.ulButtonPressed) << std::endl;
 //        std::cout << static_cast<std::bitset<64> >(state.ulButtonTouched) << std::endl;
         if(button_states_pubs_map.count(cur_sn) == 0){
-          button_states_pubs_map[cur_sn] = nh_ptr_->create_publisher<sensor_msgs::msg::Joy>("/open_vr/controller_"+cur_sn+"/joy", 10);
+          button_states_pubs_map[cur_sn] = nh_ptr_->create_publisher<sensor_msgs::msg::Joy>("open_vr/controller_"+cur_sn+"/joy", 10);
         }
         button_states_pubs_map[cur_sn]->publish(joy);
       }
@@ -695,7 +692,7 @@ void OPEN_VRnode::Run()
     tf_world.setRotation(quat_world);
 
     geometry_msgs::msg::Transform msg_tf = tf2::toMsg(tf_world);
-    geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "world"; tfs.child_frame_id = "world_open_vr";
+    geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "world_open_vr_calibrated"; tfs.child_frame_id = "world_open_vr";
     tf_broadcaster_->sendTransform(tfs);
 
     // Publish twist messages for controller1 and controller2
