@@ -5,13 +5,19 @@
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 #include "tf2_ros/transform_listener.h"
 #include "tf2_ros/buffer.h"
+#include <iostream>
+#include <format>
+#include "vr_interface.h"
+
+// messages
 #include <sensor_msgs/msg/joy.hpp>
 #include <sensor_msgs/msg/joy_feedback.hpp>
-#include <std_srvs/srv/empty.hpp>
-#include <iostream>
-#include "vr_interface.h"
 #include <geometry_msgs/msg/twist_stamped.hpp>
 #include "geometry_msgs/msg/transform_stamped.hpp"
+#include <sensor_msgs/msg/compressed_image.hpp>
+
+// services
+#include <std_srvs/srv/empty.hpp>
 
 
 #define _USE_MATH_DEFINES
@@ -31,6 +37,7 @@ rclcpp::shutdown();
 }
 
 #define USE_IMAGE
+#define MONOSCOPIC
 
 #define USE_OPENGL
 //#define USE_VULKAN
@@ -63,7 +70,7 @@ class CMainApplicationMod : public CMainApplication{
     cv::Mat ros_img[LR];
     double cam_f[LR][XY];
     const double hmd_fov;//field of view
-    float hmd_fov_h, hmd_fov_v;
+    float hmd_fov_x, hmd_fov_y;
     int RenderFrame_hz_count;
 
     void InitTextures(){
@@ -73,8 +80,8 @@ class CMainApplicationMod : public CMainApplication{
       hmd_panel_img[R] = cv::Mat(cv::Size(m_nRenderWidth, m_nRenderHeight), CV_8UC3, CV_RGB(100,100,100));
       for ( int i = 0; i < vr::k_unMaxTrackedDeviceCount; i++){
         if(m_pHMD->GetTrackedDeviceClass(i) == vr::TrackedDeviceClass_HMD){
-          m_pHMD->GetStringTrackedDeviceProperty( i, vr::Prop_ScreenshotHorizontalFieldOfViewDegrees_Float, (char *)&hmd_fov_h, sizeof(float), NULL );
-          m_pHMD->GetStringTrackedDeviceProperty( i, vr::Prop_ScreenshotVerticalFieldOfViewDegrees_Float, (char *)&hmd_fov_v, sizeof(float), NULL );
+          m_pHMD->GetStringTrackedDeviceProperty( i, vr::Prop_ScreenshotHorizontalFieldOfViewDegrees_Float, (char *)&hmd_fov_x, sizeof(float), NULL );
+          m_pHMD->GetStringTrackedDeviceProperty( i, vr::Prop_ScreenshotVerticalFieldOfViewDegrees_Float, (char *)&hmd_fov_y, sizeof(float), NULL );
         }
       }
     }
@@ -139,9 +146,49 @@ class CMainApplicationMod : public CMainApplication{
         ros_img_resized[i].copyTo(out[i](hmd_panel_draw_rect));
       }
     }
+    void processROSMonoImage(cv::Mat (&in)[LR], cv::Mat (&out)[LR]){
+      // from here: https://en.wikipedia.org/wiki/Focal_length#In_photography 
+      // & here: http://ksimek.github.io/2013/08/13/intrinsic/ 
+      // FOV = 2 arctan x/2f; x=width of film (i.e. # pixels), f=focal length
+      // fx = f*Sx
+      // tan(FOV/2) * 2f = x
+      cv::Mat in_resized[LR];
+      float scale = 3.0;
+
+      for(int i=0;i<LR;i++){
+        int sx = (int)(scale * (float)in[i].cols);
+        int sy = (int)(scale * (float)in[i].rows);
+        cv::resize(in[i], in_resized[i], cv::Size(sx, sy));
+        cv::flip(in_resized[i], in_resized[i], 0);
+
+        int cols = (float)in_resized[i].cols;
+        int rows = (float)in_resized[i].rows;
+        // equations: ar = Y/X; Y = ar * X; X = Y/ar
+        float aspect_ratio =  rows/cols; 
+
+        // make sure final image isn't larger than m_nRenderWidth, m_nRenderHeight
+        if (cols > m_nRenderWidth) {
+          // shrink in X
+          cv::resize(in_resized[i], in_resized[i], cv::Size(m_nRenderWidth, aspect_ratio * m_nRenderWidth));
+        }
+        if (rows > m_nRenderHeight) {
+          // shrink in X
+          cv::resize(in_resized[i], in_resized[i], cv::Size(m_nRenderHeight / aspect_ratio, m_nRenderHeight));
+        }
+
+        // data shared, not copied
+        out[i] = in_resized[i];
+        // in_resized[i].copyTo(out[i]);
+      }
+    }
 
     void UpdateTexturemaps(){
-      processROSStereoImage(ros_img, hmd_panel_img);
+      cv::Mat out[LR];
+      #if defined MONOSCOPIC
+        processROSMonoImage(ros_img, out);
+      #else
+        processROSStereoImage(ros_img, hmd_panel_img);
+      #endif
       for(int i=0;i<LR;i++){
         if(i==L)glBindTexture( GL_TEXTURE_2D, leftEyeDesc.m_nResolveTextureId );
         else if(i==R)glBindTexture( GL_TEXTURE_2D, rightEyeDesc.m_nResolveTextureId );
@@ -149,7 +196,15 @@ class CMainApplicationMod : public CMainApplication{
         int cur_tex_w,cur_tex_h;
         glGetTexLevelParameteriv( GL_TEXTURE_2D , 0 , GL_TEXTURE_WIDTH , &cur_tex_w );
         glGetTexLevelParameteriv( GL_TEXTURE_2D , 0 , GL_TEXTURE_HEIGHT , &cur_tex_h );
-        glTexSubImage2D( GL_TEXTURE_2D, 0, cur_tex_w/2 - hmd_panel_img[i].cols/2, cur_tex_h/2 - hmd_panel_img[i].rows/2, hmd_panel_img[i].cols, hmd_panel_img[i].rows, GL_RGB, GL_UNSIGNED_BYTE, hmd_panel_img[i].data );
+
+        // offset towards center
+        int offset = 225; // [pixels]
+        if (i==L){
+          glTexSubImage2D( GL_TEXTURE_2D, 0,  cur_tex_w/2 - out[i].cols/2 + offset, cur_tex_h/2 - out[i].rows/2, out[i].cols, out[i].rows, GL_RGB, GL_UNSIGNED_BYTE, out[i].data );
+        } else {
+          glTexSubImage2D( GL_TEXTURE_2D, 0, cur_tex_w/2 - out[i].cols/2 - offset, cur_tex_h/2 - out[i].rows/2, out[i].cols, out[i].rows, GL_RGB, GL_UNSIGNED_BYTE, out[i].data );
+        }
+        // glTexSubImage2D( GL_TEXTURE_2D, 0, cur_tex_w/2 - out[i].cols/2, cur_tex_h/2 - out[i].rows/2, out[i].cols, out[i].rows, GL_RGB, GL_UNSIGNED_BYTE, out[i].data );
 //        glGenerateMipmap(GL_TEXTURE_2D);
         glBindTexture( GL_TEXTURE_2D, 0 );
       }
@@ -432,7 +487,6 @@ std::string GetTrackedDeviceString( vr::IVRSystem *pHmd, vr::TrackedDeviceIndex_
   return sResult;
 }
 #endif
-
 
 class OPEN_VRnode
 {
@@ -819,7 +873,7 @@ int main(int argc, char** argv){
   std::cout << "RCLCPP Init'd\n";
 
 #ifdef USE_IMAGE
-  OPEN_VRnode nodeApp(90); // OPEN_VR display max fps
+  OPEN_VRnode nodeApp(60); // OPEN_VR display max fps
 #else
   OPEN_VRnode nodeApp(30);
   std::cout << "Made Open_VR node class\n";
