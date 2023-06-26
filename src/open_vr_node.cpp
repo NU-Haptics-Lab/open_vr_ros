@@ -1,4 +1,5 @@
 #include <cmath>
+#include <string>
 #include <rclcpp/rclcpp.hpp>
 #include <signal.h>
 #include "tf2_ros/transform_broadcaster.h"
@@ -18,6 +19,8 @@
 
 // services
 #include <std_srvs/srv/empty.hpp>
+#include <open_vr_ros/srv/set_origin.hpp>
+
 
 
 #define _USE_MATH_DEFINES
@@ -496,7 +499,8 @@ class OPEN_VRnode
     bool Init();
     void Run();
     void Shutdown();
-    bool setOriginCB(const std::shared_ptr<std_srvs::srv::Empty::Request> req, std::shared_ptr<std_srvs::srv::Empty::Response> res);
+    bool setOriginCB(const std::shared_ptr<open_vr_ros::srv::SetOrigin::Request> req, std::shared_ptr<open_vr_ros::srv::SetOrigin::Response> res);
+    bool setOriginCB_empty(const std::shared_ptr<std_srvs::srv::Empty::Request> req, std::shared_ptr<std_srvs::srv::Empty::Response> res);
     void set_feedback(const sensor_msgs::msg::JoyFeedback::ConstPtr msg);
     rclcpp::Node::SharedPtr nh_ptr_;
     VRInterface vr_;
@@ -513,14 +517,15 @@ class OPEN_VRnode
 
   private:
     rclcpp::Rate loop_rate_;
-    std::vector<double> world_offset_;
-    double world_yaw_;
+    std::vector<double> offset_;
+    double offset_yaw_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_{nullptr};
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
 
 
-    rclcpp::Service<std_srvs::srv::Empty>::SharedPtr set_origin_server_;
+    rclcpp::Service<open_vr_ros::srv::SetOrigin>::SharedPtr set_origin_server_;
+    rclcpp::Service<std_srvs::srv::Empty>::SharedPtr set_origin_server_empty_;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist0_pub_;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist1_pub_;
     rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr twist2_pub_;
@@ -531,8 +536,8 @@ class OPEN_VRnode
 OPEN_VRnode::OPEN_VRnode(int rate)
   : loop_rate_(rate)
   , vr_()
-  , world_offset_({0, 0, 0})
-  , world_yaw_(0)
+  , offset_({0, 0, 0})
+  , offset_yaw_(0)
 {
   nh_ptr_ = rclcpp::Node::make_shared("open_vr_node");
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(nh_ptr_);
@@ -540,17 +545,19 @@ OPEN_VRnode::OPEN_VRnode(int rate)
   tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
   // declare parameters
-  nh_ptr_->declare_parameter("open_vr/world_offset", world_offset_); // default values
-  nh_ptr_->declare_parameter("open_vr/world_yaw", world_yaw_); // default values
+  nh_ptr_->declare_parameter("open_vr/offset", offset_); // default values
+  nh_ptr_->declare_parameter("open_vr/yaw", offset_yaw_); // default values
 
 
   // get parameters
-  world_offset_ = nh_ptr_->get_parameter("open_vr/world_offset").as_double_array();
-  world_yaw_ = nh_ptr_->get_parameter("open_vr/world_yaw").as_double();
+  offset_ = nh_ptr_->get_parameter("open_vr/offset").as_double_array();
+  offset_yaw_ = nh_ptr_->get_parameter("open_vr/yaw").as_double();
 
   // rest of constructor
-  RCLCPP_INFO(nh_ptr_->get_logger(), " [OPEN_VR] World offset: [%2.3f , %2.3f, %2.3f] %2.3f", world_offset_[0], world_offset_[1], world_offset_[2], world_yaw_);
-  set_origin_server_ = nh_ptr_->create_service<std_srvs::srv::Empty>("open_vr/set_origin", std::bind(&OPEN_VRnode::setOriginCB, this, _1, _2));
+  RCLCPP_INFO(nh_ptr_->get_logger(), " [OPEN_VR] Offset offset: [%2.3f , %2.3f, %2.3f] %2.3f", offset_[0], offset_[1], offset_[2], 
+  offset_yaw_);
+  set_origin_server_ = nh_ptr_->create_service<open_vr_ros::srv::SetOrigin>("open_vr/set_origin", std::bind(&OPEN_VRnode::setOriginCB, this, _1, _2));
+  set_origin_server_empty_ = nh_ptr_->create_service<std_srvs::srv::Empty>("open_vr/set_origin_empty", std::bind(&OPEN_VRnode::setOriginCB_empty, this, _1, _2));
   twist0_pub_ = nh_ptr_->create_publisher<geometry_msgs::msg::TwistStamped>("open_vr/twist0", 10);
   twist1_pub_ = nh_ptr_->create_publisher<geometry_msgs::msg::TwistStamped>("open_vr/twist1", 10);
   twist2_pub_ = nh_ptr_->create_publisher<geometry_msgs::msg::TwistStamped>("open_vr/twist2", 10);
@@ -600,7 +607,24 @@ void OPEN_VRnode::Shutdown()
   vr_.Shutdown();
 }
 
-bool OPEN_VRnode::setOriginCB(const std::shared_ptr<std_srvs::srv::Empty::Request> req, std::shared_ptr<std_srvs::srv::Empty::Response> res)
+bool OPEN_VRnode::setOriginCB(const std::shared_ptr<open_vr_ros::srv::SetOrigin::Request> req, std::shared_ptr<open_vr_ros::srv::SetOrigin::Response> res)
+{
+  // extract from message
+  offset_[0] = req->x;
+  offset_[1] = req->y;
+  offset_[2] = req->z;
+  offset_yaw_ = req->yaw;
+
+  nh_ptr_->set_parameter(rclcpp::Parameter("open_vr/offset", offset_));
+  nh_ptr_->set_parameter(rclcpp::Parameter("open_vr/yaw", offset_yaw_));
+  RCLCPP_INFO(nh_ptr_->get_logger(), " [OPEN_VR] New offset offset: [%2.3f , %2.3f, %2.3f] %2.3f", offset_[0], offset_[1], offset_[2], offset_yaw_);
+
+  res->success = true;
+  return true;
+}
+
+
+bool OPEN_VRnode::setOriginCB_empty(const std::shared_ptr<std_srvs::srv::Empty::Request> req, std::shared_ptr<std_srvs::srv::Empty::Response> res)
 {
   double tf_matrix[3][4];
   int index = 0, dev_type; // index = 0 should be the HMD
@@ -619,20 +643,20 @@ bool OPEN_VRnode::setOriginCB(const std::shared_ptr<std_srvs::srv::Empty::Reques
   c_z.normalize();
   double new_yaw = acos(tf2::Vector3(0,0,1).dot(c_z)) + M_PI_2;
   if (c_z[0] < 0) new_yaw = -new_yaw;
-  world_yaw_ = -new_yaw;
+  offset_yaw_ = -new_yaw;
 
   tf2::Vector3 new_offset;
   tf2::Matrix3x3 new_rot;
-  new_rot.setRPY(0, 0, world_yaw_);
+  new_rot.setRPY(0, 0, offset_yaw_);
   new_offset = new_rot*tf2::Vector3(-tf_matrix[0][3], tf_matrix[2][3], -tf_matrix[1][3]);
 
-  world_offset_[0] = new_offset[0];
-  world_offset_[1] = new_offset[1];
-  world_offset_[2] = new_offset[2];
+  offset_[0] = new_offset[0];
+  offset_[1] = new_offset[1];
+  offset_[2] = new_offset[2];
 
-  nh_ptr_->set_parameter(rclcpp::Parameter("open_vr/world_offset", world_offset_));
-  nh_ptr_->set_parameter(rclcpp::Parameter("open_vr/world_yaw", world_yaw_));
-  RCLCPP_INFO(nh_ptr_->get_logger(), " [OPEN_VR] New world offset: [%2.3f , %2.3f, %2.3f] %2.3f", world_offset_[0], world_offset_[1], world_offset_[2], world_yaw_);
+  nh_ptr_->set_parameter(rclcpp::Parameter("open_vr/offset", offset_));
+  nh_ptr_->set_parameter(rclcpp::Parameter("open_vr/yaw", offset_yaw_));
+  RCLCPP_INFO(nh_ptr_->get_logger(), " [OPEN_VR] New offset offset: [%2.3f , %2.3f, %2.3f] %2.3f", offset_[0], offset_[1], offset_[2], offset_yaw_);
 
   return true;
 }
@@ -683,21 +707,21 @@ void OPEN_VRnode::Run()
       if (dev_type == 1)
       {
         geometry_msgs::msg::Transform msg_tf = tf2::toMsg(tf);
-        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "world_open_vr"; tfs.child_frame_id = "hmd";
+        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "open_vr"; tfs.child_frame_id = "hmd";
         tf_broadcaster_->sendTransform(tfs);
       }
       // It's a controller
       if (dev_type == 2)
       {
         geometry_msgs::msg::Transform msg_tf = tf2::toMsg(tf);
-        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "world_open_vr"; tfs.child_frame_id = "controller_"+cur_sn;
+        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "open_vr"; tfs.child_frame_id = "controller_"+std::to_string(i);
         tf_broadcaster_->sendTransform(tfs);
 
         vr::VRControllerState_t state;
         vr_.HandleInput(i, state);
         sensor_msgs::msg::Joy joy;
         joy.header.stamp = nh_ptr_->get_clock()->now();
-        joy.header.frame_id = "controller_"+cur_sn;
+        joy.header.frame_id = "controller_"+std::to_string(i);
         joy.buttons.assign(BUTTON_NUM, 0);
         joy.axes.assign(AXES_NUM, 0.0); // x-axis, y-axis
         if((1LL << vr::k_EButton_ApplicationMenu) & state.ulButtonPressed)
@@ -725,28 +749,28 @@ void OPEN_VRnode::Run()
       if (dev_type == 3)
       {
         geometry_msgs::msg::Transform msg_tf = tf2::toMsg(tf);
-        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "world_open_vr"; tfs.child_frame_id = "tracker_"+cur_sn;
+        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "open_vr"; tfs.child_frame_id = "tracker_"+cur_sn;
         tf_broadcaster_->sendTransform(tfs);
       }
       // It's a lighthouse
       if (dev_type == 4)
       {
         geometry_msgs::msg::Transform msg_tf = tf2::toMsg(tf);
-        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "world_open_vr"; tfs.child_frame_id = "lighthouse_"+cur_sn;
+        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "open_vr"; tfs.child_frame_id = "lighthouse_"+cur_sn;
         tf_broadcaster_->sendTransform(tfs);
       }
 
     }
 
     // Publish corrective transform
-    tf2::Transform tf_world;
-    tf_world.setOrigin(tf2::Vector3(world_offset_[0], world_offset_[1], world_offset_[2]));
-    tf2::Quaternion quat_world;
-    quat_world.setRPY(M_PI/2, 0, world_yaw_);
-    tf_world.setRotation(quat_world);
+    tf2::Transform tf_offset;
+    tf_offset.setOrigin(tf2::Vector3(offset_[0], offset_[1], offset_[2]));
+    tf2::Quaternion quat_offset;
+    quat_offset.setRPY(M_PI/2, 0, offset_yaw_);
+    tf_offset.setRotation(quat_offset);
 
-    geometry_msgs::msg::Transform msg_tf = tf2::toMsg(tf_world);
-    geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "world_open_vr_calibrated"; tfs.child_frame_id = "world_open_vr";
+    geometry_msgs::msg::Transform msg_tf = tf2::toMsg(tf_offset);
+    geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "open_vr_calibrated"; tfs.child_frame_id = "open_vr";
     tf_broadcaster_->sendTransform(tfs);
 
     // Publish twist messages for controller1 and controller2
@@ -763,7 +787,7 @@ void OPEN_VRnode::Run()
 
         geometry_msgs::msg::TwistStamped twist_msg_stamped;
         twist_msg_stamped.header.stamp = nh_ptr_->get_clock()->now();
-        twist_msg_stamped.header.frame_id = "world_open_vr";
+        twist_msg_stamped.header.frame_id = "open_vr";
         twist_msg_stamped.twist = twist_msg;
 
         twist0_pub_->publish(twist_msg_stamped);
@@ -783,7 +807,7 @@ void OPEN_VRnode::Run()
 
         geometry_msgs::msg::TwistStamped twist_msg_stamped;
         twist_msg_stamped.header.stamp = nh_ptr_->get_clock()->now();
-        twist_msg_stamped.header.frame_id = "world_open_vr";
+        twist_msg_stamped.header.frame_id = "open_vr";
         twist_msg_stamped.twist = twist_msg;
 
         twist1_pub_->publish(twist_msg_stamped);
@@ -803,7 +827,7 @@ void OPEN_VRnode::Run()
 
         geometry_msgs::msg::TwistStamped twist_msg_stamped;
         twist_msg_stamped.header.stamp = nh_ptr_->get_clock()->now();
-        twist_msg_stamped.header.frame_id = "world_open_vr";
+        twist_msg_stamped.header.frame_id = "open_vr";
         twist_msg_stamped.twist = twist_msg;
 
         twist2_pub_->publish(twist_msg_stamped);
@@ -817,7 +841,7 @@ void OPEN_VRnode::Run()
     pMainApplication->RenderFrame();
 #endif
 
-    RCLCPP_INFO_THROTTLE(nh_ptr_->get_logger(), *nh_ptr_->get_clock(), 1000, "Run() @ %d [fps]", [](int& cin){int ans = cin; cin=0; return ans;}(run_hz_count));
+    // RCLCPP_INFO_THROTTLE(nh_ptr_->get_logger(), *nh_ptr_->get_clock(), 1000, "Run() @ %d [fps]", [](int& cin){int ans = cin; cin=0; return ans;}(run_hz_count));
     run_hz_count++;
     rclcpp::spin_some(nh_ptr_);
     loop_rate_.sleep();
@@ -873,7 +897,7 @@ int main(int argc, char** argv){
   std::cout << "RCLCPP Init'd\n";
 
 #ifdef USE_IMAGE
-  OPEN_VRnode nodeApp(60); // OPEN_VR display max fps
+  OPEN_VRnode nodeApp(30); // OPEN_VR display max fps
 #else
   OPEN_VRnode nodeApp(30);
   std::cout << "Made Open_VR node class\n";
