@@ -545,13 +545,13 @@ OPEN_VRnode::OPEN_VRnode(int rate)
   tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
   // declare parameters
-  nh_ptr_->declare_parameter("open_vr/offset", offset_); // default values
-  nh_ptr_->declare_parameter("open_vr/yaw", offset_yaw_); // default values
+  nh_ptr_->declare_parameter("offset", offset_); // default values
+  nh_ptr_->declare_parameter("yaw", offset_yaw_); // default values
 
 
   // get parameters
-  offset_ = nh_ptr_->get_parameter("open_vr/offset").as_double_array();
-  offset_yaw_ = nh_ptr_->get_parameter("open_vr/yaw").as_double();
+  offset_ = nh_ptr_->get_parameter("offset").as_double_array();
+  offset_yaw_ = nh_ptr_->get_parameter("yaw").as_double();
 
   // rest of constructor
   RCLCPP_INFO(nh_ptr_->get_logger(), " [OPEN_VR] Offset offset: [%2.3f , %2.3f, %2.3f] %2.3f", offset_[0], offset_[1], offset_[2], 
