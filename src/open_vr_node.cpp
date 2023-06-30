@@ -609,18 +609,23 @@ void OPEN_VRnode::Shutdown()
 
 bool OPEN_VRnode::setOriginCB(const std::shared_ptr<open_vr_ros::srv::SetOrigin::Request> req, std::shared_ptr<open_vr_ros::srv::SetOrigin::Response> res)
 {
-  // extract from message
-  offset_[0] = req->x;
-  offset_[1] = req->y;
-  offset_[2] = req->z;
-  offset_yaw_ = req->yaw;
+  try{
+    RCLCPP_INFO(nh_ptr_->get_logger(), "SetOriginCB Service Initiated");
+    // extract from message
+    offset_[0] = req->x;
+    offset_[1] = req->y;
+    offset_[2] = req->z;
+    offset_yaw_ = req->yaw;
 
-  nh_ptr_->set_parameter(rclcpp::Parameter("open_vr/offset", offset_));
-  nh_ptr_->set_parameter(rclcpp::Parameter("open_vr/yaw", offset_yaw_));
-  RCLCPP_INFO(nh_ptr_->get_logger(), " [OPEN_VR] New offset offset: [%2.3f , %2.3f, %2.3f] %2.3f", offset_[0], offset_[1], offset_[2], offset_yaw_);
+    nh_ptr_->set_parameter(rclcpp::Parameter("open_vr/offset", offset_));
+    nh_ptr_->set_parameter(rclcpp::Parameter("open_vr/yaw", offset_yaw_));
+    RCLCPP_INFO(nh_ptr_->get_logger(), " [OPEN_VR] New offset offset: [%2.3f , %2.3f, %2.3f] %2.3f", offset_[0], offset_[1], offset_[2], offset_yaw_);
 
-  res->success = true;
-  return true;
+    res->success = true;
+  } catch(...) {
+    res->success = false;
+  }
+  return res->success;
 }
 
 
@@ -714,14 +719,14 @@ void OPEN_VRnode::Run()
       if (dev_type == 2)
       {
         geometry_msgs::msg::Transform msg_tf = tf2::toMsg(tf);
-        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "open_vr"; tfs.child_frame_id = "controller_"+std::to_string(i);
+        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "open_vr"; tfs.child_frame_id = "controller_"+cur_sn;
         tf_broadcaster_->sendTransform(tfs);
 
         vr::VRControllerState_t state;
         vr_.HandleInput(i, state);
         sensor_msgs::msg::Joy joy;
         joy.header.stamp = nh_ptr_->get_clock()->now();
-        joy.header.frame_id = "controller_"+std::to_string(i);
+        joy.header.frame_id = "controller_"+cur_sn;
         joy.buttons.assign(BUTTON_NUM, 0);
         joy.axes.assign(AXES_NUM, 0.0); // x-axis, y-axis
         if((1LL << vr::k_EButton_ApplicationMenu) & state.ulButtonPressed)
