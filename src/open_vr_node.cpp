@@ -39,7 +39,7 @@ void mySigintHandler(int sig){
 rclcpp::shutdown();
 }
 
-#define USE_IMAGE
+// #define USE_IMAGE
 #define MONOSCOPIC
 
 #define USE_OPENGL
@@ -904,7 +904,7 @@ int main(int argc, char** argv){
 #ifdef USE_IMAGE
   OPEN_VRnode nodeApp(30); // OPEN_VR display max fps
 #else
-  OPEN_VRnode nodeApp(30);
+  OPEN_VRnode nodeApp(60);
   std::cout << "Made Open_VR node class\n";
 #endif
   bool init = nodeApp.Init();
