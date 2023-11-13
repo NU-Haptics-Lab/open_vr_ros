@@ -9,6 +9,11 @@ add_definitions(-DOPENVR_PATH="${OPENVR}") ## for source code to get sample text
 set(THIRDPARTY_DIR ${OPENVR}/samples/thirdparty)
 set(SHARED_SRC_DIR ${OPENVR}/samples/shared)
 
+# cmake PATHS
+set(CMAKE_PREFIX_PATH ${OPENVR}/samples/thirdparty/glew/glew-1.11.0)
+set(CMAKE_LIBRARY_PATH ${OPENVR}/samples/thirdparty/glew/glew-1.11.0/bin/Release/x64)
+ 
+
 ## find openvr
 find_library(OPENVR_LIBRARIES
   NAMES
@@ -91,7 +96,7 @@ find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
-find_package(cv_bridge REQUIRED)
+# find_package(cv_bridge REQUIRED)
 find_package(image_transport REQUIRED)
 find_package(std_srvs REQUIRED)
 
@@ -133,7 +138,7 @@ target_link_libraries(open_vr_node
 )
 
 
-ament_target_dependencies(open_vr_node rclcpp std_msgs tf2 tf2_ros tf2_geometry_msgs geometry_msgs cv_bridge image_transport std_srvs)
+ament_target_dependencies(open_vr_node rclcpp std_msgs tf2 tf2_ros tf2_geometry_msgs geometry_msgs image_transport std_srvs)
 
 
 install(TARGETS open_vr_node

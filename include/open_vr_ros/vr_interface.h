@@ -2,11 +2,12 @@
 #define _VR_INTERFACE_H_
 
 #include <openvr.h>
-#include <boost/function.hpp>
+#include <functional>
+// #include <boost/function.hpp>
 
-typedef boost::function<void(const std::string&)> DebugMsgCallback;
-typedef boost::function<void(const std::string&)> InfoMsgCallback;
-typedef boost::function<void(const std::string&)> ErrorMsgCallback;
+typedef std::function<void(const std::string&)> DebugMsgCallback;
+typedef std::function<void(const std::string&)> InfoMsgCallback;
+typedef std::function<void(const std::string&)> ErrorMsgCallback;
 
 const int BUTTON_NUM = 4;
 const int AXES_NUM = 3;
