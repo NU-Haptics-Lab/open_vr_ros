@@ -519,6 +519,7 @@ class OPEN_VRnode
     rclcpp::Rate loop_rate_;
     std::vector<double> offset_;
     double offset_yaw_;
+    std::string frame_prefix_;
     std::shared_ptr<tf2_ros::TransformListener> tf_listener_{nullptr};
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
@@ -547,11 +548,13 @@ OPEN_VRnode::OPEN_VRnode(int rate)
   // declare parameters
   nh_ptr_->declare_parameter("offset", offset_); // default values
   nh_ptr_->declare_parameter("yaw", offset_yaw_); // default values
+  nh_ptr_->declare_parameter("FRAME_PREFIX", ""); // default values
 
 
   // get parameters
   offset_ = nh_ptr_->get_parameter("offset").as_double_array();
   offset_yaw_ = nh_ptr_->get_parameter("yaw").as_double();
+  frame_prefix_ = nh_ptr_->get_parameter("FRAME_PREFIX").as_string();
 
   // rest of constructor
   RCLCPP_INFO(nh_ptr_->get_logger(), " [OPEN_VR] Offset offset: [%2.3f , %2.3f, %2.3f] %2.3f", offset_[0], offset_[1], offset_[2], 
@@ -712,21 +715,21 @@ void OPEN_VRnode::Run()
       if (dev_type == 1)
       {
         geometry_msgs::msg::Transform msg_tf = tf2::toMsg(tf);
-        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "open_vr"; tfs.child_frame_id = "hmd";
+        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = frame_prefix_ + "open_vr"; tfs.child_frame_id = frame_prefix_ + "hmd";
         tf_broadcaster_->sendTransform(tfs);
       }
       // It's a controller
       if (dev_type == 2)
       {
         geometry_msgs::msg::Transform msg_tf = tf2::toMsg(tf);
-        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "open_vr"; tfs.child_frame_id = "controller_"+cur_sn;
+        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = frame_prefix_ + "open_vr"; tfs.child_frame_id = frame_prefix_ + "controller_"+cur_sn;
         tf_broadcaster_->sendTransform(tfs);
 
         vr::VRControllerState_t state;
         vr_.HandleInput(i, state);
         sensor_msgs::msg::Joy joy;
         joy.header.stamp = nh_ptr_->get_clock()->now();
-        joy.header.frame_id = "controller_"+cur_sn;
+        joy.header.frame_id = frame_prefix_ + "controller_"+cur_sn;
         joy.buttons.assign(BUTTON_NUM, 0);
         joy.axes.assign(AXES_NUM, 0.0); // x-axis, y-axis
         if((1LL << vr::k_EButton_ApplicationMenu) & state.ulButtonPressed)
@@ -754,14 +757,14 @@ void OPEN_VRnode::Run()
       if (dev_type == 3)
       {
         geometry_msgs::msg::Transform msg_tf = tf2::toMsg(tf);
-        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "open_vr"; tfs.child_frame_id = "tracker_"+cur_sn;
+        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = frame_prefix_ + "open_vr"; tfs.child_frame_id = frame_prefix_ + "tracker_"+cur_sn;
         tf_broadcaster_->sendTransform(tfs);
       }
       // It's a lighthouse
       if (dev_type == 4)
       {
         geometry_msgs::msg::Transform msg_tf = tf2::toMsg(tf);
-        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "open_vr"; tfs.child_frame_id = "lighthouse_"+cur_sn;
+        geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = frame_prefix_ + "open_vr"; tfs.child_frame_id = frame_prefix_ + "lighthouse_"+cur_sn;
         tf_broadcaster_->sendTransform(tfs);
       }
 
@@ -775,7 +778,9 @@ void OPEN_VRnode::Run()
     tf_offset.setRotation(quat_offset);
 
     geometry_msgs::msg::Transform msg_tf = tf2::toMsg(tf_offset);
-    geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now(); tfs.header.frame_id = "open_vr_calibrated"; tfs.child_frame_id = "open_vr";
+    geometry_msgs::msg::TransformStamped tfs; tfs.transform = msg_tf; tfs.header.stamp = nh_ptr_->get_clock()->now();
+    tfs.header.frame_id = frame_prefix_ + "open_vr_calibrated";
+    tfs.child_frame_id = frame_prefix_ + "open_vr";
     tf_broadcaster_->sendTransform(tfs);
 
     // Publish twist messages for controller1 and controller2
@@ -792,7 +797,7 @@ void OPEN_VRnode::Run()
 
         geometry_msgs::msg::TwistStamped twist_msg_stamped;
         twist_msg_stamped.header.stamp = nh_ptr_->get_clock()->now();
-        twist_msg_stamped.header.frame_id = "open_vr";
+        twist_msg_stamped.header.frame_id = frame_prefix_ + "open_vr";
         twist_msg_stamped.twist = twist_msg;
 
         twist0_pub_->publish(twist_msg_stamped);
@@ -812,7 +817,7 @@ void OPEN_VRnode::Run()
 
         geometry_msgs::msg::TwistStamped twist_msg_stamped;
         twist_msg_stamped.header.stamp = nh_ptr_->get_clock()->now();
-        twist_msg_stamped.header.frame_id = "open_vr";
+        twist_msg_stamped.header.frame_id = frame_prefix_ + "open_vr";
         twist_msg_stamped.twist = twist_msg;
 
         twist1_pub_->publish(twist_msg_stamped);
@@ -832,7 +837,7 @@ void OPEN_VRnode::Run()
 
         geometry_msgs::msg::TwistStamped twist_msg_stamped;
         twist_msg_stamped.header.stamp = nh_ptr_->get_clock()->now();
-        twist_msg_stamped.header.frame_id = "open_vr";
+        twist_msg_stamped.header.frame_id = frame_prefix_ + "open_vr";
         twist_msg_stamped.twist = twist_msg;
 
         twist2_pub_->publish(twist_msg_stamped);
