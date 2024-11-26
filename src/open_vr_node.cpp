@@ -134,13 +134,18 @@ OPEN_VRnode::OPEN_VRnode(int rate)
   // subs
 
   // pubs
-  hmd_tfs = nh_ptr_->create_publisher<geometry_msgs::msg::TransformStamped>("open_vr/hmd", 10);
-  twist0_pub_ = nh_ptr_->create_publisher<geometry_msgs::msg::TwistStamped>("open_vr/twist0", 10);
-  twist1_pub_ = nh_ptr_->create_publisher<geometry_msgs::msg::TwistStamped>("open_vr/twist1", 10);
-  twist2_pub_ = nh_ptr_->create_publisher<geometry_msgs::msg::TwistStamped>("open_vr/twist2", 10);
-  pub_status_HMD_on = nh_ptr_->create_publisher<std_msgs::msg::Bool>("open_vr/HMD/on", 10);
-  pub_status_LEFT_on = nh_ptr_->create_publisher<std_msgs::msg::Bool>("open_vr/LEFT/on", 10);
-  pub_status_RIGHT_on = nh_ptr_->create_publisher<std_msgs::msg::Bool>("open_vr/RIGHT/on", 10);
+  // make the qos_profile
+  rclcpp::QoS qos_profile(10);
+  qos_profile.liveliness(RMW_QOS_POLICY_LIVELINESS_MANUAL_BY_TOPIC);
+  qos_profile.liveliness_lease_duration(1s); 
+  
+  hmd_tfs = nh_ptr_->create_publisher<geometry_msgs::msg::TransformStamped>("open_vr/hmd", qos_profile);
+  twist0_pub_ = nh_ptr_->create_publisher<geometry_msgs::msg::TwistStamped>("open_vr/twist0", qos_profile);
+  twist1_pub_ = nh_ptr_->create_publisher<geometry_msgs::msg::TwistStamped>("open_vr/twist1", qos_profile);
+  twist2_pub_ = nh_ptr_->create_publisher<geometry_msgs::msg::TwistStamped>("open_vr/twist2", qos_profile);
+  pub_status_HMD_on = nh_ptr_->create_publisher<std_msgs::msg::Bool>("open_vr/HMD/on", qos_profile);
+  pub_status_LEFT_on = nh_ptr_->create_publisher<std_msgs::msg::Bool>("open_vr/LEFT/on", qos_profile);
+  pub_status_RIGHT_on = nh_ptr_->create_publisher<std_msgs::msg::Bool>("open_vr/RIGHT/on", qos_profile);
 
   // services
   set_origin_server_ = nh_ptr_->create_service<open_vr_ros::srv::SetOrigin>("open_vr/set_origin", std::bind(&OPEN_VRnode::setOriginCB, this, _1, _2));
